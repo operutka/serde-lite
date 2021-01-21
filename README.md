@@ -29,6 +29,7 @@ to do is to put `serde-lite` instead of `serde` into your `Cargo.toml`.
 Here is a brief example of serialization into JSON:
 ```rust
 use serde_lite::Serialize;
+use serde_lite_derive::Serialize;
 
 #[derive(Serialize)]
 struct MyStruct {
@@ -50,6 +51,7 @@ let json = serde_json::to_string_pretty(&intermediate).unwrap();
 Here is a brief example of de-serialization from JSON:
 ```rust
 use serde_lite::Deserialize;
+use serde_lite_derive::Deserialize;
 
 #[derive(Deserialize)]
 struct MyStruct {
@@ -72,6 +74,7 @@ Wait. What? Yes, this library has one more cool feature - partial updates.
 Simply derive `Update` the same way you'd derive `Deserialize`. Example:
 ```rust
 use serde_lite::{Deserialize, Update};
+use serde_lite_derive::{Deserialize, Update};
 
 #[derive(Deserialize, Update)]
 struct MyStruct {
@@ -121,10 +124,10 @@ complex types and the size of the resulting binary matters to you. It is also
 very useful in projects where you need to be able to partially update your data
 based on the user input (e.g. REST APIs).
 
-## When not to use this library
+## When to avoid using this library
 
 If the only thing that matters to you is the runtime performance, you probably
 don't want to use this library. It also isn't very useful for
-serializing/de-serializing large data structures because they need to be
+serializing/de-serializing huge amount of data because it needs to be
 transformed into the intermediate representation at first. And, finally, this
 library can only be used with self-describing formats like JSON.

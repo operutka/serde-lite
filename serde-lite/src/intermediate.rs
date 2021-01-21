@@ -103,6 +103,22 @@ impl<'de> Deserialize<'de> for Number {
 }
 
 /// Construct the intermediate value directly using JSON syntax.
+///
+/// # Example
+/// ```rust
+/// use serde_lite::intermediate;
+///
+/// let data = intermediate!({
+///     "field1": null,
+///     "field2": "foo",
+///     "field3": 33,
+///     "field4": 44.4,
+///     "field5": [1, 2, 3, 4, 5],
+///     "field6": {
+///         "inner_field": "Hello!",
+///     }
+/// });
+/// ```
 #[macro_export]
 macro_rules! intermediate {
     ({ $($key:literal : $value:tt),* $(,)? }) => {
