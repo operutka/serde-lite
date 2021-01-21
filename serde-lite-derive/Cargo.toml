@@ -1,0 +1,19 @@
+[package]
+name = "serde-lite-derive"
+version = "0.1.0"
+authors = ["Ondrej Perutka <perutka.ondrej@gmail.com>"]
+license = "MIT"
+description = "Implementation of #[derive(Deserialize, Serialize, Update)] for serde-lite"
+repository = "https://github.com/operutka/serde-lite"
+keywords = ["derive", "serde", "serialization"]
+categories = ["encoding"]
+readme = "README.md"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = "1.0"

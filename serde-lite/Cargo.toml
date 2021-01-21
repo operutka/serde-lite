@@ -1,0 +1,32 @@
+[package]
+name = "serde-lite"
+version = "0.1.0"
+authors = ["Ondrej Perutka <perutka.ondrej@gmail.com>"]
+license = "MIT"
+description = "A general-purpose serialization/de-serialization library"
+repository = "https://github.com/operutka/serde-lite"
+keywords = ["api", "serde", "serialization"]
+categories = ["encoding"]
+readme = "README.md"
+edition = "2018"
+
+[features]
+default = []
+derive = ["serde-lite-derive"]
+preserve-order = ["indexmap"]
+
+[dependencies.indexmap]
+version = "1.6"
+optional = true
+
+[dependencies.serde]
+version = "1.0"
+default-features = false
+features = ["std"]
+
+[dependencies.serde-lite-derive]
+path = "../serde-lite-derive"
+optional = true
+
+[dev-dependencies.serde-lite-derive]
+path = "../serde-lite-derive"
