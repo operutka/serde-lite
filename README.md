@@ -1,5 +1,16 @@
 # Serde Lite
 
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][license-badge]][license-url]
+[![Build Status][build-badge]][build-url]
+
+[crates-badge]: https://img.shields.io/crates/v/serde-lite
+[crates-url]: https://crates.io/crates/serde-lite
+[license-badge]: https://img.shields.io/crates/l/serde-lite
+[license-url]: https://github.com/operutka/serde-lite/blob/master/LICENSE
+[build-badge]: https://travis-ci.org/operutka/serde-lite.svg?branch=master
+[build-url]: https://travis-ci.org/operutka/serde-lite
+
 This library provides a bit more lightweight implementation (compared to Serde)
 of general-purpose serialization and de-serialization. **The intention here is
 not to replace Serde completely** though. Serde does an amazing job and it
