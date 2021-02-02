@@ -38,6 +38,7 @@ fn expand_for_struct(
     };
 
     let expanded = quote! {
+        #[allow(unused_variables)]
         impl #impl_generics serde_lite::Update for #name #ty_generics #where_clause {
             fn update(&mut self, __val: &serde_lite::Intermediate) -> Result<(), serde_lite::Error> {
                 #update
@@ -104,6 +105,7 @@ fn expand_for_enum(
     };
 
     quote! {
+        #[allow(unused_variables)]
         impl #impl_generics serde_lite::Update for #name #ty_generics #where_clause {
             fn update(&mut self, __val: &serde_lite::Intermediate) -> Result<(), serde_lite::Error> {
                 #update

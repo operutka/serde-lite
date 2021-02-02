@@ -40,6 +40,7 @@ fn expand_for_struct(
     };
 
     quote! {
+        #[allow(unused_variables)]
         impl #impl_generics serde_lite::Serialize for #name #ty_generics #where_clause {
             fn serialize(&self) -> Result<serde_lite::Intermediate, serde_lite::Error> {
                 #serialize
@@ -116,6 +117,7 @@ fn expand_for_enum(
     }
 
     quote! {
+        #[allow(unused_variables)]
         impl #impl_generics serde_lite::Serialize for #name #ty_generics #where_clause {
             fn serialize(&self) -> Result<serde_lite::Intermediate, serde_lite::Error> {
                 #serialize
