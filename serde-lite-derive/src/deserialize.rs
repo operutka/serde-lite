@@ -411,25 +411,25 @@ fn deserialize_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStre
     let mut constructor = TokenStream::new();
 
     if !fields.unnamed.is_empty() {
+        let len = Literal::usize_unsuffixed(fields.unnamed.len());
+
         match fields.unnamed.len() {
             0 => (),
             1 => deserialize.extend(quote! {
-                let __arr = __val.as_array().unwrap_or_else(|| std::slice::from_ref(__val));
+                let __arr = std::slice::from_ref(__val);
             }),
             _ => deserialize.extend(quote! {
                 let __arr = __val
                     .as_array()
                     .ok_or_else(|| serde_lite::Error::invalid_value("array"))?;
+
+                if __arr.len() < #len {
+                    return Err(serde_lite::Error::invalid_value(concat!("array of length ", #len)));
+                }
             }),
         }
 
-        let len = Literal::usize_unsuffixed(fields.unnamed.len());
-
         deserialize.extend(quote! {
-            if __arr.len() < #len {
-                return Err(serde_lite::Error::invalid_value(concat!("array of length ", #len)));
-            }
-
             let mut __field_errors = Vec::new();
         });
     }
@@ -460,11 +460,7 @@ fn deserialize_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStre
     match fields.unnamed.len() {
         0 => (),
         1 => deserialize.extend(quote! {
-            if __val.as_array().is_some() {
-                if !__field_errors.is_empty() {
-                    return Err(serde_lite::Error::UnnamedFieldErrors(__field_errors));
-                }
-            } else if let Some((_, err)) = __field_errors.pop() {
+            if let Some((_, err)) = __field_errors.pop() {
                 return Err(err);
             }
         }),

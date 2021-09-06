@@ -144,14 +144,6 @@ fn expand_internally_tagged_enum(tag: &str) -> TokenStream {
             __res.extend(__map);
 
             return Ok(serde_lite::Intermediate::Map(__res));
-        } else if let serde_lite::Intermediate::Array(__arr) = __content {
-            if __arr.is_empty() {
-                let mut __map = serde_lite::Map::with_capacity(1);
-
-                __map.insert(String::from(#ltag), serde_lite::Intermediate::String(__tag));
-
-                return Ok(serde_lite::Intermediate::Map(__map));
-            }
         }
 
         Err(serde_lite::Error::custom("enum cannot be tagged internally"))
@@ -178,14 +170,6 @@ fn expand_externally_tagged_enum() -> TokenStream {
     quote! {
         if __content.is_none() {
             return Ok(serde_lite::Intermediate::String(__tag));
-        } else if let serde_lite::Intermediate::Map(__map) = &__content {
-            if __map.is_empty() {
-                return Ok(serde_lite::Intermediate::String(__tag));
-            }
-        } else if let serde_lite::Intermediate::Array(__arr) = &__content {
-            if __arr.is_empty() {
-                return Ok(serde_lite::Intermediate::String(__tag));
-            }
         }
 
         let mut __map = serde_lite::Map::with_capacity(1);

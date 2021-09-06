@@ -80,10 +80,10 @@ fn test_tuple_struct_deserialize() {
     struct SingleElementTuple(u32);
 
     let output1 = SingleElementTuple::deserialize(&input1).unwrap();
-    let output2 = SingleElementTuple::deserialize(&input2).unwrap();
 
     assert_eq!(output1.0, 10);
-    assert_eq!(output2.0, 10);
+
+    assert!(SingleElementTuple::deserialize(&input2).is_err());
 
     #[derive(Deserialize)]
     struct MultiElementStruct(u32, String);
@@ -137,7 +137,7 @@ fn test_empty_struct_deserialize() {
     struct UnitStruct;
 
     #[derive(Deserialize)]
-    struct EmptyStruct {};
+    struct EmptyStruct {}
 
     #[derive(Deserialize)]
     struct EmptyTupleStruct();
@@ -153,7 +153,7 @@ fn test_empty_struct_update() {
     struct UnitStruct;
 
     #[derive(Deserialize, Update)]
-    struct EmptyStruct {};
+    struct EmptyStruct {}
 
     #[derive(Deserialize, Update)]
     struct EmptyTupleStruct();
@@ -194,6 +194,14 @@ fn test_enum_deserialize() {
 
     let input7 = intermediate!(null);
 
+    let input8 = intermediate!({
+        "Variant4": [],
+    });
+
+    let input9 = intermediate!({
+        "Variant4": [123],
+    });
+
     #[derive(Deserialize)]
     enum TestEnum {
         Variant1,
@@ -203,13 +211,15 @@ fn test_enum_deserialize() {
             field1: u32,
             field2: String,
         },
+        Variant4(Vec<u32>),
     }
 
     let output1 = TestEnum::deserialize(&input1).unwrap();
     let output2 = TestEnum::deserialize(&input2).unwrap();
     let output3 = TestEnum::deserialize(&input3).unwrap();
-    let output4 = TestEnum::deserialize(&input4).unwrap();
     let output5 = TestEnum::deserialize(&input5).unwrap();
+    let output8 = TestEnum::deserialize(&input8).unwrap();
+    let output9 = TestEnum::deserialize(&input9).unwrap();
 
     assert!(matches!(output1, TestEnum::Variant1));
     assert!(matches!(output2, TestEnum::Variant1));
@@ -220,12 +230,6 @@ fn test_enum_deserialize() {
         panic!("output3 test failed");
     }
 
-    if let TestEnum::Variant2(n) = output4 {
-        assert_eq!(n, 20);
-    } else {
-        panic!("output4 test failed");
-    }
-
     if let TestEnum::Variant3 { field1, field2 } = output5 {
         assert_eq!(field1, 10);
         assert_eq!(field2.as_str(), "hello");
@@ -233,8 +237,21 @@ fn test_enum_deserialize() {
         panic!("output4 test failed");
     }
 
+    assert!(TestEnum::deserialize(&input4).is_err());
     assert!(TestEnum::deserialize(&input6).is_err());
     assert!(TestEnum::deserialize(&input7).is_err());
+
+    if let TestEnum::Variant4(arr) = output8 {
+        assert_eq!(arr.as_slice(), &[][..]);
+    } else {
+        panic!("output8 test failed");
+    }
+
+    if let TestEnum::Variant4(arr) = output9 {
+        assert_eq!(arr.as_slice(), &[123][..]);
+    } else {
+        panic!("output9 test failed");
+    }
 }
 
 #[test]
@@ -489,6 +506,8 @@ fn test_externally_tagged_enum_serialize() {
         field7: ExternallyTaggedEnum,
         field8: ExternallyTaggedEnum,
         field9: ExternallyTaggedEnum,
+        field10: ExternallyTaggedEnum,
+        field11: ExternallyTaggedEnum,
     }
 
     #[derive(Serialize)]
@@ -509,6 +528,7 @@ fn test_externally_tagged_enum_serialize() {
             field2: InnerTestStruct,
         },
         Variant5(InnerTestStruct),
+        Variant6(Vec<u32>),
     }
 
     let instance = OuterTestStruct {
@@ -526,6 +546,8 @@ fn test_externally_tagged_enum_serialize() {
             inner1: false,
             inner2: String::from("abc"),
         }),
+        field10: ExternallyTaggedEnum::Variant6(vec![]),
+        field11: ExternallyTaggedEnum::Variant6(vec![50]),
     };
 
     let data = instance.serialize().unwrap();
@@ -559,6 +581,17 @@ fn test_externally_tagged_enum_serialize() {
     assert_eq!(inner.len(), 2);
     assert_eq!(get_bool_field(inner, "inner1"), false);
     assert_eq!(get_str_field(inner, "inner2"), "abc");
+
+    let field10 = get_map_field(map, "field10");
+    assert_eq!(field10.len(), 1);
+    let arr = get_array_field(field10, "Variant6");
+    assert_eq!(arr.len(), 0);
+
+    let field11 = get_map_field(map, "field11");
+    assert_eq!(field11.len(), 1);
+    let arr = get_array_field(field11, "Variant6");
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0].as_u64().unwrap().unwrap(), 50);
 }
 
 #[test]
