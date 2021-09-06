@@ -1,6 +1,6 @@
 [package]
 name = "serde-lite-derive"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Ondrej Perutka <perutka.ondrej@gmail.com>"]
 license = "MIT"
 description = "Implementation of #[derive(Deserialize, Serialize, Update)] for serde-lite"
