@@ -112,9 +112,7 @@ fn test_tuple_struct_update() {
 
     assert_eq!(instance.0, 10);
 
-    instance.update(&input2).unwrap();
-
-    assert_eq!(instance.0, 20);
+    assert!(instance.update(&input2).is_err());
 
     #[derive(Deserialize, Update)]
     struct MultiElementStruct(u32, String);
@@ -280,6 +278,14 @@ fn test_enum_update() {
 
     let input7 = intermediate!(null);
 
+    let input8 = intermediate!({
+        "Variant4": [],
+    });
+
+    let input9 = intermediate!({
+        "Variant4": [456],
+    });
+
     #[derive(Deserialize, Update)]
     enum TestEnum {
         Variant1,
@@ -289,6 +295,7 @@ fn test_enum_update() {
             field1: u32,
             field2: String,
         },
+        Variant4(Vec<u32>),
     }
 
     let mut instance = TestEnum::Variant2(0);
@@ -309,13 +316,7 @@ fn test_enum_update() {
         panic!("test failed");
     }
 
-    instance.update(&input4).unwrap();
-
-    if let TestEnum::Variant2(n) = instance {
-        assert_eq!(n, 40);
-    } else {
-        panic!("test failed");
-    }
+    assert!(instance.update(&input4).is_err());
 
     let mut instance = TestEnum::Variant1;
 
@@ -339,6 +340,24 @@ fn test_enum_update() {
 
     assert!(instance.update(&input6).is_err());
     assert!(instance.update(&input7).is_err());
+
+    let mut instance = TestEnum::Variant4(vec![33]);
+
+    instance.update(&input8).unwrap();
+
+    if let TestEnum::Variant4(arr) = &instance {
+        assert_eq!(arr.as_slice(), &[][..]);
+    } else {
+        panic!("test failed");
+    }
+
+    instance.update(&input9).unwrap();
+
+    if let TestEnum::Variant4(arr) = instance {
+        assert_eq!(arr.as_slice(), &[456][..]);
+    } else {
+        panic!("test failed");
+    }
 }
 
 #[test]
