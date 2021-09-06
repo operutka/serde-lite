@@ -237,11 +237,11 @@ macro_rules! serialize_tuple {
             $($ty: Serialize,)+
         {
             fn serialize(&self) -> Result<Intermediate, Error> {
-                let mut res = Vec::with_capacity($len);
-
-                $(
-                    res.push(self.$n.serialize()?);
-                )+
+                let res = vec![
+                    $(
+                        self.$n.serialize()?,
+                    )+
+                ];
 
                 Ok(Intermediate::Array(res))
             }

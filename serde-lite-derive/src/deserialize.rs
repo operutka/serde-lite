@@ -304,7 +304,7 @@ fn construct_tuple_enum_variant(variant: &Variant, fields: &FieldsUnnamed) -> To
         });
     }
 
-    let (deserialize, constructor) = deserialize_unnamed_fields(&fields);
+    let (deserialize, constructor) = deserialize_unnamed_fields(fields);
 
     let ident = &variant.ident;
 
@@ -343,7 +343,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
     for field in &fields.named {
         let name = field.ident.as_ref().unwrap();
         let ty = &field.ty;
-        let sname = attributes::get_field_name(&field);
+        let sname = attributes::get_field_name(field);
         let lname = Literal::string(&sname);
         let skip = attributes::has_flag(&field.attrs, "skip")
             || attributes::has_flag(&field.attrs, "skip_deserializing");

@@ -336,12 +336,12 @@ where
         let val = val.as_map().ok_or_else(|| Error::invalid_value("map"))?;
 
         for (name, value) in val {
-            let k = K::from_str(&name).map_err(|err| Error::InvalidKey(err.to_string()))?;
+            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
 
             if let Some(inner) = self.get_mut(&k) {
-                V::update(inner, &value)?;
+                V::update(inner, value)?;
             } else {
-                self.insert(k, V::deserialize(&value)?);
+                self.insert(k, V::deserialize(value)?);
             }
         }
 

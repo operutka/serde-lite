@@ -291,8 +291,8 @@ where
         let mut res = HashMap::with_capacity(val.len());
 
         for (name, value) in val {
-            let k = K::from_str(&name).map_err(|err| Error::InvalidKey(err.to_string()))?;
-            let v = V::deserialize(&value)?;
+            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
+            let v = V::deserialize(value)?;
 
             res.insert(k, v);
         }

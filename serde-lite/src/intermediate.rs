@@ -212,10 +212,8 @@ impl Intermediate {
 
             if second.is_some() {
                 None
-            } else if let Some(v) = first {
-                Some(v)
             } else {
-                None
+                first
             }
         } else {
             None

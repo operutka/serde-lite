@@ -387,7 +387,7 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
 
     for field in &fields.named {
         let name = field.ident.as_ref().unwrap();
-        let sname = attributes::get_field_name(&field);
+        let sname = attributes::get_field_name(field);
         let lname = Literal::string(&sname);
 
         deconstructor.extend(quote! {

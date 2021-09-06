@@ -194,7 +194,7 @@ fn serialize_struct_enum_variant(variant: &Variant, fields: &FieldsNamed) -> Tok
     let (deconstructor, serialize) = serialize_named_fields(fields);
 
     let ident = &variant.ident;
-    let sname = attributes::get_variant_name(&variant);
+    let sname = attributes::get_variant_name(variant);
     let lname = Literal::string(&sname);
 
     quote! {
@@ -214,7 +214,7 @@ fn serialize_tuple_enum_variant(variant: &Variant, fields: &FieldsUnnamed) -> To
     let (deconstructor, serialize) = serialize_unnamed_fields(fields);
 
     let ident = &variant.ident;
-    let sname = attributes::get_variant_name(&variant);
+    let sname = attributes::get_variant_name(variant);
     let lname = Literal::string(&sname);
 
     quote! {
@@ -237,7 +237,7 @@ fn serialize_tuple_enum_variant(variant: &Variant, fields: &FieldsUnnamed) -> To
 /// Generate code for serializing a given enum variant.
 fn serialize_unit_enum_variant(variant: &Variant) -> TokenStream {
     let ident = &variant.ident;
-    let sname = attributes::get_variant_name(&variant);
+    let sname = attributes::get_variant_name(variant);
     let lname = Literal::string(&sname);
 
     quote! {
