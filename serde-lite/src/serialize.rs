@@ -19,30 +19,35 @@ pub trait Serialize {
 }
 
 impl Serialize for bool {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::Bool(*self))
     }
 }
 
 impl Serialize for i64 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::Number(Number::SignedInt(*self)))
     }
 }
 
 impl Serialize for u64 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::Number(Number::UnsignedInt(*self)))
     }
 }
 
 impl Serialize for f32 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::Number(Number::Float(*self as _)))
     }
 }
 
 impl Serialize for f64 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::Number(Number::Float(*self)))
     }
@@ -51,6 +56,7 @@ impl Serialize for f64 {
 macro_rules! serialize_for_signed_int {
     ( $x:ty ) => {
         impl Serialize for $x {
+            #[inline]
             fn serialize(&self) -> Result<Intermediate, Error> {
                 Ok(Intermediate::Number(Number::SignedInt(i64::from(*self))))
             }
@@ -61,6 +67,7 @@ macro_rules! serialize_for_signed_int {
 macro_rules! serialize_for_unsigned_int {
     ( $x:ty ) => {
         impl Serialize for $x {
+            #[inline]
             fn serialize(&self) -> Result<Intermediate, Error> {
                 Ok(Intermediate::Number(Number::UnsignedInt(u64::from(*self))))
             }
@@ -77,6 +84,7 @@ serialize_for_unsigned_int!(u16);
 serialize_for_unsigned_int!(u32);
 
 impl Serialize for i128 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         i64::try_from(*self)
             .map(|v| Intermediate::Number(Number::SignedInt(v)))
@@ -85,6 +93,7 @@ impl Serialize for i128 {
 }
 
 impl Serialize for u128 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         u64::try_from(*self)
             .map(|v| Intermediate::Number(Number::UnsignedInt(v)))
@@ -93,6 +102,7 @@ impl Serialize for u128 {
 }
 
 impl Serialize for isize {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         i64::try_from(*self)
             .map(|v| Intermediate::Number(Number::SignedInt(v)))
@@ -101,6 +111,7 @@ impl Serialize for isize {
 }
 
 impl Serialize for usize {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         u64::try_from(*self)
             .map(|v| Intermediate::Number(Number::UnsignedInt(v)))
@@ -109,20 +120,23 @@ impl Serialize for usize {
 }
 
 impl Serialize for char {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::String(self.to_string()))
     }
 }
 
 impl Serialize for String {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::String(self.clone()))
     }
 }
 
 impl<'a> Serialize for &'a str {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
-        Ok(Intermediate::String(self.to_string()))
+        Ok(Intermediate::String(String::from(*self)))
     }
 }
 
@@ -130,6 +144,7 @@ impl<T> Serialize for Option<T>
 where
     T: Serialize,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         if let Some(inner) = self.as_ref() {
             inner.serialize()
@@ -158,6 +173,7 @@ impl<'a, T> Serialize for &'a mut [T]
 where
     T: Serialize,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         <&[T] as Serialize>::serialize(&(self as _))
     }
@@ -167,12 +183,14 @@ impl<T> Serialize for Vec<T>
 where
     T: Serialize,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         <&[T] as Serialize>::serialize(&self.as_slice())
     }
 }
 
 impl<T> Serialize for [T; 0] {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::Array(Vec::new()))
     }
@@ -184,6 +202,7 @@ macro_rules! serialize_array {
         where
             T: Serialize,
         {
+            #[inline]
             fn serialize(&self) -> Result<Intermediate, Error> {
                 <&[T] as Serialize>::serialize(&&self[..])
             }
@@ -225,6 +244,7 @@ serialize_array!(31);
 serialize_array!(32);
 
 impl Serialize for () {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::Array(Vec::new()))
     }
@@ -289,7 +309,7 @@ where
     V: Serialize,
 {
     fn serialize(&self) -> Result<Intermediate, Error> {
-        let mut res = indexmap::IndexMap::with_capacity(self.len());
+        let mut res = Map::with_capacity(self.len());
 
         for (k, v) in self.iter() {
             res.insert(k.to_string(), v.serialize()?);
@@ -303,6 +323,7 @@ impl<'a, T> Serialize for &'a T
 where
     T: Serialize + ?Sized,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         <T as Serialize>::serialize(self)
     }
@@ -312,6 +333,7 @@ impl<'a, T> Serialize for &'a mut T
 where
     T: Serialize + ?Sized,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         <T as Serialize>::serialize(self)
     }
@@ -323,6 +345,7 @@ macro_rules! serialize_wrapper {
         where
             T: Serialize + ?Sized,
         {
+            #[inline]
             fn serialize(&self) -> Result<Intermediate, Error> {
                 <T as Serialize>::serialize(&*self)
             }
@@ -338,6 +361,7 @@ impl<T> Serialize for Mutex<T>
 where
     T: Serialize + ?Sized,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         self.lock().unwrap().serialize()
     }
@@ -347,6 +371,7 @@ impl<T> Serialize for RefCell<T>
 where
     T: Serialize + ?Sized,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         self.borrow().serialize()
     }

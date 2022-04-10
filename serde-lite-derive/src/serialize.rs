@@ -71,13 +71,7 @@ fn expand_struct_unnamed_fields(fields: &FieldsUnnamed) -> TokenStream {
 
         #serialize
 
-        if __arr.is_empty() {
-            Ok(serde_lite::Intermediate::None)
-        } else if __arr.len() == 1 {
-            Ok(__arr.pop().unwrap())
-        } else {
-            Ok(serde_lite::Intermediate::Array(__arr))
-        }
+        Ok(__val)
     }
 }
 
@@ -134,19 +128,19 @@ fn expand_internally_tagged_enum(tag: &str) -> TokenStream {
         if __content.is_none() {
             let mut __map = serde_lite::Map::with_capacity(1);
 
-            __map.insert(String::from(#ltag), serde_lite::Intermediate::String(__tag));
+            __map.insert_with_str_key(#ltag, serde_lite::Intermediate::String(String::from(__tag)));
 
-            return Ok(serde_lite::Intermediate::Map(__map));
+            Ok(serde_lite::Intermediate::Map(__map))
         } else if let serde_lite::Intermediate::Map(__map) = __content {
             let mut __res = serde_lite::Map::with_capacity(__map.len() + 1);
 
-            __res.insert(String::from(#ltag), serde_lite::Intermediate::String(__tag));
+            __res.insert_with_str_key(#ltag, serde_lite::Intermediate::String(String::from(__tag)));
             __res.extend(__map);
 
-            return Ok(serde_lite::Intermediate::Map(__res));
+            Ok(serde_lite::Intermediate::Map(__res))
+        } else {
+            Err(serde_lite::Error::custom_static("enum cannot be tagged internally"))
         }
-
-        Err(serde_lite::Error::custom("enum cannot be tagged internally"))
     }
 }
 
@@ -158,8 +152,8 @@ fn expand_adjacently_tagged_enum(tag: &str, content: &str) -> TokenStream {
     quote! {
         let mut __map = serde_lite::Map::with_capacity(2);
 
-        __map.insert(String::from(#ltag), serde_lite::Intermediate::String(__tag));
-        __map.insert(String::from(#lcont), __content);
+        __map.insert_with_str_key(#ltag, serde_lite::Intermediate::String(String::from(__tag)));
+        __map.insert_with_str_key(#lcont, __content);
 
         Ok(serde_lite::Intermediate::Map(__map))
     }
@@ -169,14 +163,14 @@ fn expand_adjacently_tagged_enum(tag: &str, content: &str) -> TokenStream {
 fn expand_externally_tagged_enum() -> TokenStream {
     quote! {
         if __content.is_none() {
-            return Ok(serde_lite::Intermediate::String(__tag));
+            Ok(serde_lite::Intermediate::String(String::from(__tag)))
+        } else {
+            let mut __map = serde_lite::Map::with_capacity(1);
+
+            __map.insert_with_str_key(__tag, __content);
+
+            Ok(serde_lite::Intermediate::Map(__map))
         }
-
-        let mut __map = serde_lite::Map::with_capacity(1);
-
-        __map.insert(__tag, __content);
-
-        Ok(serde_lite::Intermediate::Map(__map))
     }
 }
 
@@ -201,10 +195,7 @@ fn serialize_struct_enum_variant(variant: &Variant, fields: &FieldsNamed) -> Tok
         Self::#ident { #deconstructor } => {
             #serialize
 
-            let __tag = String::from(#lname);
-            let __content = serde_lite::Intermediate::Map(__map);
-
-            (__tag, __content)
+            (#lname, serde_lite::Intermediate::Map(__map))
         }
     }
 }
@@ -221,15 +212,7 @@ fn serialize_tuple_enum_variant(variant: &Variant, fields: &FieldsUnnamed) -> To
         Self::#ident ( #deconstructor ) => {
             #serialize
 
-            let __tag = String::from(#lname);
-
-            if __arr.is_empty() {
-                (__tag, serde_lite::Intermediate::None)
-            } else if __arr.len() == 1 {
-                (__tag, __arr.pop().unwrap())
-            } else {
-                (__tag, serde_lite::Intermediate::Array(__arr))
-            }
+            (#lname, __val)
         }
     }
 }
@@ -242,10 +225,7 @@ fn serialize_unit_enum_variant(variant: &Variant) -> TokenStream {
 
     quote! {
         Self::#ident => {
-            let __tag = String::from(#lname);
-            let __content = serde_lite::Intermediate::None;
-
-            (__tag, __content)
+            (#lname, serde_lite::Intermediate::None)
         }
     }
 }
@@ -258,7 +238,7 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
 
     let mut serialize = quote! {
         let mut __map = serde_lite::Map::with_capacity(#len);
-        let mut __field_errors = Vec::new();
+        let mut __field_errors = serde_lite::ErrorList::new();
     };
 
     for field in &fields.named {
@@ -278,11 +258,11 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
             quote! {
                 match #name.serialize() {
                     Ok(serde_lite::Intermediate::Map(inner)) => __map.extend(inner),
-                    Ok(_) => return Err(serde_lite::Error::custom(
+                    Ok(_) => return Err(serde_lite::Error::custom_static(
                         concat!("field \"", stringify!(#name), "\" cannot be flattened")
                     )),
                     Err(serde_lite::Error::NamedFieldErrors(errors)) => {
-                        __field_errors.extend(errors);
+                        __field_errors.append(errors);
                     }
                     Err(err) => return Err(err),
                 }
@@ -290,10 +270,10 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
         } else {
             quote! {
                 match #name.serialize() {
-                    Ok(v) => {
-                        __map.insert(String::from(#lname), v);
+                    Ok(v) => __map.insert_with_str_key(#lname, v),
+                    Err(err) => {
+                        __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err));
                     }
-                    Err(err) => __field_errors.push((String::from(#lname), err)),
                 }
             }
         };
@@ -323,6 +303,49 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
 
 /// Generate code for serializing given unnamed fields.
 fn serialize_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStream) {
+    match fields.unnamed.len() {
+        0 => serialize_unnamed_fields_0(),
+        1 => serialize_unnamed_fields_1(),
+        _ => serialize_unnamed_fields_n(fields),
+    }
+}
+
+/// Generate code for serializing given unnamed fields where the actual number
+/// of fields is zero (e.g. zero-length tuple struct).
+fn serialize_unnamed_fields_0() -> (TokenStream, TokenStream) {
+    let deconstructor = TokenStream::new();
+
+    let mut serialize = TokenStream::new();
+
+    serialize.extend(quote! {
+        let __val = serde_lite::Intermediate::None;
+    });
+
+    (deconstructor, serialize)
+}
+
+/// Generate code for serializing given unnamed fields where the actual number
+/// of fields is one (e.g. single-element tuple struct).
+fn serialize_unnamed_fields_1() -> (TokenStream, TokenStream) {
+    let mut deconstructor = TokenStream::new();
+    let mut serialize = TokenStream::new();
+
+    let name = Ident::new("f0", Span::call_site());
+
+    deconstructor.extend(quote! {
+        #name
+    });
+
+    serialize.extend(quote! {
+        let __val = #name.serialize()?;
+    });
+
+    (deconstructor, serialize)
+}
+
+/// Generate code for serializing given unnamed fields where the actual number
+/// of fields is greater one (e.g. multiple-element tuple struct).
+fn serialize_unnamed_fields_n(fields: &FieldsUnnamed) -> (TokenStream, TokenStream) {
     let mut deconstructor = TokenStream::new();
     let mut serialize = TokenStream::new();
 
@@ -331,7 +354,7 @@ fn serialize_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStream
 
         serialize.extend(quote! {
             let mut __arr = Vec::with_capacity(#len);
-            let mut __field_errors = Vec::new();
+            let mut __field_errors = serde_lite::ErrorList::new();
         });
     }
 
@@ -340,37 +363,25 @@ fn serialize_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStream
         let name = Ident::new(&sname, Span::call_site());
         let lindex = Literal::usize_unsuffixed(index);
 
-        if index == 0 {
-            deconstructor.extend(quote! {
-                #name
-            });
-        } else {
-            deconstructor.extend(quote! {
-                , #name
-            });
-        }
+        deconstructor.extend(quote! {
+            #name,
+        });
 
         serialize.extend(quote! {
             match #name.serialize() {
                 Ok(v) => __arr.push(v),
-                Err(err) => __field_errors.push((#lindex, err)),
+                Err(err) => __field_errors.push(serde_lite::UnnamedFieldError::new(#lindex, err)),
             }
         });
     }
 
-    match fields.unnamed.len() {
-        0 => (),
-        1 => serialize.extend(quote! {
-            if let Some((_, err)) = __field_errors.pop() {
-                return Err(err);
-            }
-        }),
-        _ => serialize.extend(quote! {
-            if !__field_errors.is_empty() {
-                return Err(serde_lite::Error::UnnamedFieldErrors(__field_errors));
-            }
-        }),
-    }
+    serialize.extend(quote! {
+        if !__field_errors.is_empty() {
+            return Err(serde_lite::Error::UnnamedFieldErrors(__field_errors));
+        }
+
+        let __val = serde_lite::Intermediate::Array(__arr);
+    });
 
     (deconstructor, serialize)
 }

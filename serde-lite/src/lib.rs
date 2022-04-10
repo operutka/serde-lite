@@ -132,17 +132,23 @@
 
 mod deserialize;
 mod intermediate;
+mod map;
 mod serialize;
 mod update;
 
-use std::fmt::{self, Display, Formatter};
+use std::{
+    borrow::Cow,
+    collections::LinkedList,
+    fmt::{self, Display, Formatter},
+};
 
 #[cfg(feature = "derive")]
 pub use serde_lite_derive::{Deserialize, Serialize, Update};
 
 pub use crate::{
     deserialize::Deserialize,
-    intermediate::{Intermediate, Map, Number},
+    intermediate::{Intermediate, Number},
+    map::{Map, MapImpl},
     serialize::Serialize,
     update::Update,
 };
@@ -156,32 +162,46 @@ pub enum Error {
     UnknownEnumVariant,
     MissingEnumVariantContent,
     InvalidKey(String),
-    InvalidValue(String),
-    NamedFieldErrors(Vec<(String, Error)>),
-    UnnamedFieldErrors(Vec<(usize, Error)>),
-    Custom(String),
+    InvalidValue(Cow<'static, str>),
+    NamedFieldErrors(ErrorList<NamedFieldError>),
+    UnnamedFieldErrors(ErrorList<UnnamedFieldError>),
+    Custom(Cow<'static, str>),
 }
 
 impl Error {
     /// Create an invalid value error with a given expected type name.
+    #[inline]
     pub fn invalid_value<T>(expected: T) -> Self
     where
         T: ToString,
     {
-        Self::InvalidValue(expected.to_string())
+        Self::InvalidValue(Cow::Owned(expected.to_string()))
+    }
+
+    /// Create an invalid value error with a given expected type name.
+    #[inline]
+    pub const fn invalid_value_static(expected: &'static str) -> Self {
+        Self::InvalidValue(Cow::Borrowed(expected))
     }
 
     /// Create a custom error with a given error message.
+    #[inline]
     pub fn custom<T>(msg: T) -> Self
     where
         T: ToString,
     {
-        Self::Custom(msg.to_string())
+        Self::Custom(Cow::Owned(msg.to_string()))
+    }
+
+    /// Create a custom error with a given error message.
+    #[inline]
+    pub const fn custom_static(msg: &'static str) -> Self {
+        Self::Custom(Cow::Borrowed(msg))
     }
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Self::OutOfBounds => f.write_str("value is out of bounds"),
             Self::UnsupportedConversion => f.write_str("conversion not supported"),
@@ -191,26 +211,10 @@ impl Display for Error {
             Self::InvalidKey(msg) => write!(f, "invalid key: {}", msg),
             Self::InvalidValue(expected) => write!(f, "invalid value ({} expected)", expected),
             Self::NamedFieldErrors(errors) => {
-                write!(f, "field errors (")?;
-                for (index, (name, error)) in errors.iter().enumerate() {
-                    if index > 0 {
-                        write!(f, ", {}: {}", name, error)?;
-                    } else {
-                        write!(f, "{}: {}", name, error)?;
-                    }
-                }
-                write!(f, ")")
+                write!(f, "field errors ({})", errors)
             }
             Self::UnnamedFieldErrors(errors) => {
-                write!(f, "field errors (")?;
-                for (error_index, (field_index, error)) in errors.iter().enumerate() {
-                    if error_index > 0 {
-                        write!(f, ", {}: {}", field_index, error)?;
-                    } else {
-                        write!(f, "{}: {}", field_index, error)?;
-                    }
-                }
-                write!(f, ")")
+                write!(f, "field errors ({})", errors)
             }
             Self::Custom(msg) => f.write_str(msg),
         }
@@ -218,3 +222,226 @@ impl Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl From<ErrorList<NamedFieldError>> for Error {
+    #[inline]
+    fn from(errors: ErrorList<NamedFieldError>) -> Self {
+        Self::NamedFieldErrors(errors)
+    }
+}
+
+impl From<NamedFieldError> for Error {
+    #[inline]
+    fn from(err: NamedFieldError) -> Self {
+        let mut errors = ErrorList::new();
+
+        errors.push(err);
+
+        Self::from(errors)
+    }
+}
+
+impl From<ErrorList<UnnamedFieldError>> for Error {
+    #[inline]
+    fn from(errors: ErrorList<UnnamedFieldError>) -> Self {
+        Self::UnnamedFieldErrors(errors)
+    }
+}
+
+impl From<UnnamedFieldError> for Error {
+    #[inline]
+    fn from(err: UnnamedFieldError) -> Self {
+        let mut errors = ErrorList::new();
+
+        errors.push(err);
+
+        Self::from(errors)
+    }
+}
+
+/// Error associated with a named field.
+#[derive(Debug, Clone)]
+pub struct NamedFieldError {
+    field: Cow<'static, str>,
+    error: Error,
+}
+
+impl NamedFieldError {
+    /// Create a new error for a given named field.
+    #[inline]
+    pub fn new<T>(field: T, error: Error) -> Self
+    where
+        T: ToString,
+    {
+        Self {
+            field: Cow::Owned(field.to_string()),
+            error,
+        }
+    }
+
+    /// Create a new error for a given named field.
+    #[inline]
+    pub const fn new_static(field: &'static str, error: Error) -> Self {
+        Self {
+            field: Cow::Borrowed(field),
+            error,
+        }
+    }
+
+    /// Get the name of the field.
+    #[inline]
+    pub fn field(&self) -> &str {
+        &self.field
+    }
+
+    /// Get the error.
+    #[inline]
+    pub fn error(&self) -> &Error {
+        &self.error
+    }
+
+    /// Take the error.
+    #[inline]
+    pub fn into_error(self) -> Error {
+        self.error
+    }
+}
+
+impl Display for NamedFieldError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.field, self.error)
+    }
+}
+
+impl std::error::Error for NamedFieldError {}
+
+/// Error associated with an unnamed field.
+#[derive(Debug, Clone)]
+pub struct UnnamedFieldError {
+    index: usize,
+    error: Error,
+}
+
+impl UnnamedFieldError {
+    /// Create a new error for a given field.
+    #[inline]
+    pub const fn new(field_index: usize, error: Error) -> Self {
+        Self {
+            index: field_index,
+            error,
+        }
+    }
+
+    /// Get index of the field.
+    #[inline]
+    pub fn field_index(&self) -> usize {
+        self.index
+    }
+
+    /// Get the error.
+    #[inline]
+    pub fn error(&self) -> &Error {
+        &self.error
+    }
+
+    /// Take the error.
+    #[inline]
+    pub fn into_error(self) -> Error {
+        self.error
+    }
+}
+
+impl Display for UnnamedFieldError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.index, self.error)
+    }
+}
+
+impl std::error::Error for UnnamedFieldError {}
+
+/// List of errors.
+#[derive(Debug, Clone)]
+pub struct ErrorList<T> {
+    inner: LinkedList<T>,
+}
+
+impl<T> ErrorList<T> {
+    /// Create a new error list.
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            inner: LinkedList::new(),
+        }
+    }
+
+    /// Check if the list is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Get length of the list.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Add a given error to the list.
+    #[inline]
+    pub fn push(&mut self, err: T) {
+        self.inner.push_back(err)
+    }
+
+    /// Append a given list of errors to the current one.
+    #[inline]
+    pub fn append(&mut self, mut other: Self) {
+        self.inner.append(&mut other.inner)
+    }
+
+    /// Iterate over the errors.
+    #[inline]
+    pub fn iter(&self) -> std::collections::linked_list::Iter<'_, T> {
+        self.inner.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a ErrorList<T> {
+    type Item = &'a T;
+    type IntoIter = std::collections::linked_list::Iter<'a, T>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.iter()
+    }
+}
+
+impl<T> IntoIterator for ErrorList<T> {
+    type Item = T;
+    type IntoIter = std::collections::linked_list::IntoIter<T>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+
+impl<T> Display for ErrorList<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut iter = self.iter();
+
+        if let Some(first) = iter.next() {
+            Display::fmt(first, f)?;
+        }
+
+        for err in iter {
+            write!(f, ", {}", err)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> std::error::Error for ErrorList<T> where T: std::error::Error {}

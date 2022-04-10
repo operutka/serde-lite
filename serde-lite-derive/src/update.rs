@@ -161,17 +161,17 @@ fn expand_internally_tagged_enum(
     let ltag = Literal::string(tag_field);
 
     quote! {
-        let __obj = __val.as_map().ok_or_else(|| serde_lite::Error::invalid_value("object"))?;
+        let __obj = __val.as_map().ok_or_else(|| serde_lite::Error::invalid_value_static("object"))?;
 
         #current_variant
 
         let __variant = __obj
             .get(#ltag)
             .map(|v| v.as_str())
-            .unwrap_or_else(|| Some(__current_variant))
-            .ok_or_else(|| serde_lite::Error::NamedFieldErrors(vec![
-                (String::from(#ltag), serde_lite::Error::invalid_value("enum variant name")),
-            ]))?;
+            .unwrap_or(Some(__current_variant))
+            .ok_or_else(|| serde_lite::Error::from(
+                serde_lite::NamedFieldError::new_static(#ltag, serde_lite::Error::invalid_value_static("enum variant name"))
+            ))?;
 
         #content
 
@@ -224,7 +224,7 @@ fn expand_externally_tagged_enum(data: DataEnum) -> TokenStream {
                 _ => return Err(serde_lite::Error::UnknownEnumVariant),
             }
         } else {
-            return Err(serde_lite::Error::invalid_value("enum variant"));
+            return Err(serde_lite::Error::invalid_value_static("enum variant"));
         }
     }
 }
@@ -302,9 +302,9 @@ fn update_enum_variant_without_content(
         let lcontent = Literal::string(content);
 
         quote! {
-            return Err(serde_lite::Error::NamedFieldErrors(vec![
-                (String::from(#lcontent), serde_lite::Error::MissingField),
-            ]));
+            return Err(serde_lite::Error::from(
+                serde_lite::NamedFieldError::new_static(#lcontent, serde_lite::Error::MissingField),
+            ));
         }
     } else {
         quote! {
@@ -379,9 +379,9 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
         update.extend(quote! {
             let __obj = __val
                 .as_map()
-                .ok_or_else(|| serde_lite::Error::invalid_value("object"))?;
+                .ok_or_else(|| serde_lite::Error::invalid_value_static("object"))?;
 
-            let mut __field_errors = Vec::new();
+            let mut __field_errors = serde_lite::ErrorList::new();
         });
     }
 
@@ -404,7 +404,7 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
             update.extend(quote! {
                 if let Err(err) = serde_lite::Update::update(#name, __val) {
                     if let serde_lite::Error::NamedFieldErrors(errors) = err {
-                        __field_errors.extend(errors);
+                        __field_errors.append(errors);
                     } else {
                         return Err(err);
                     }
@@ -414,7 +414,7 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
             update.extend(quote! {
                 if let Some(__v) = __obj.get(#lname) {
                     if let Err(err) = serde_lite::Update::update(#name, __v) {
-                        __field_errors.push((String::from(#lname), err));
+                        __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err));
                     }
                 }
             });
@@ -434,68 +434,82 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
 
 /// Generate code for updating given unnamed fields.
 fn update_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStream) {
+    match fields.unnamed.len() {
+        0 => update_unnamed_fields_0(),
+        1 => update_unnamed_fields_1(),
+        _ => update_unnamed_fields_n(fields),
+    }
+}
+
+/// Generate code for updating given unnamed fields where the actual
+/// number of fields is zero (e.g. zero-length tuple struct).
+fn update_unnamed_fields_0() -> (TokenStream, TokenStream) {
+    let deconstructor = TokenStream::new();
+    let update = TokenStream::new();
+
+    (deconstructor, update)
+}
+
+/// Generate code for updating given unnamed fields where the actual
+/// number of fields is one (e.g. single-element tuple struct).
+fn update_unnamed_fields_1() -> (TokenStream, TokenStream) {
     let mut deconstructor = TokenStream::new();
     let mut update = TokenStream::new();
 
-    if !fields.unnamed.is_empty() {
-        let len = Literal::usize_unsuffixed(fields.unnamed.len());
+    let name = Ident::new("f0", Span::call_site());
 
-        match fields.unnamed.len() {
-            0 => (),
-            1 => update.extend(quote! {
-                let __arr = std::slice::from_ref(__val);
-            }),
-            _ => update.extend(quote! {
-                let __arr = __val
-                    .as_array()
-                    .ok_or_else(|| serde_lite::Error::invalid_value("array"))?;
+    deconstructor.extend(quote! {
+        #name
+    });
 
-                if __arr.len() < #len {
-                    return Err(serde_lite::Error::invalid_value(concat!("array of length ", #len)));
-                }
-            }),
+    update.extend(quote! {
+        serde_lite::Update::update(#name, __val)?;
+    });
+
+    (deconstructor, update)
+}
+
+/// Generate code for updating given unnamed fields where the actual
+/// number of fields is greater than one (e.g. multi-element tuple struct).
+fn update_unnamed_fields_n(fields: &FieldsUnnamed) -> (TokenStream, TokenStream) {
+    let mut deconstructor = TokenStream::new();
+    let mut update = TokenStream::new();
+
+    let len = Literal::usize_unsuffixed(fields.unnamed.len());
+
+    update.extend(quote! {
+        let __arr = __val
+            .as_array()
+            .ok_or_else(|| serde_lite::Error::invalid_value_static("array"))?;
+
+        if __arr.len() < #len {
+            return Err(serde_lite::Error::invalid_value_static(concat!("array of length ", #len)));
         }
 
-        update.extend(quote! {
-            let mut __field_errors = Vec::new();
-        });
-    }
+        let mut __field_errors = serde_lite::ErrorList::new();
+    });
 
     for (index, _) in fields.unnamed.iter().enumerate() {
         let sname = format!("f{}", index);
         let name = Ident::new(&sname, Span::call_site());
         let lindex = Literal::usize_unsuffixed(index);
 
-        if index == 0 {
-            deconstructor.extend(quote! {
-                #name
-            });
-        } else {
-            deconstructor.extend(quote! {
-                , #name
-            });
-        }
+        deconstructor.extend(quote! {
+            #name,
+        });
 
         update.extend(quote! {
             if let Err(err) = serde_lite::Update::update(#name, &__arr[#lindex]) {
-                __field_errors.push((#lindex, err));
+                __field_errors.push(serde_lite::UnnamedFieldError::new(#lindex, err));
             }
         });
     }
 
-    match fields.unnamed.len() {
-        0 => (),
-        1 => update.extend(quote! {
-            if let Some((_, err)) = __field_errors.pop() {
-                return Err(err);
-            }
-        }),
-        _ => update.extend(quote! {
-            if !__field_errors.is_empty() {
-                return Err(serde_lite::Error::UnnamedFieldErrors(__field_errors));
-            }
-        }),
-    }
+    update.extend(quote! {
+        if !__field_errors.is_empty() {
+            return Err(serde_lite::Error::UnnamedFieldErrors(__field_errors));
+        }
+    });
 
     (deconstructor, update)
 }

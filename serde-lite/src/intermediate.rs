@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    convert::TryInto,
+    convert::{TryFrom, TryInto},
     fmt::{self, Display, Formatter},
 };
 
@@ -10,13 +10,7 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
-use crate::Error;
-
-#[cfg(feature = "preserve-order")]
-pub type Map = indexmap::IndexMap<String, Intermediate>;
-
-#[cfg(not(feature = "preserve-order"))]
-pub type Map = HashMap<String, Intermediate>;
+use crate::{Error, Map};
 
 /// Number.
 #[derive(Debug, Copy, Clone)]
@@ -26,36 +20,74 @@ pub enum Number {
     UnsignedInt(u64),
 }
 
-impl Number {
-    /// Get the number as an f64 number.
-    pub fn as_f64(self) -> f64 {
-        match self {
-            Self::Float(v) => v,
-            Self::SignedInt(v) => v as _,
-            Self::UnsignedInt(v) => v as _,
+impl From<Number> for f64 {
+    #[inline]
+    fn from(n: Number) -> Self {
+        match n {
+            Number::Float(v) => v,
+            Number::SignedInt(v) => v as _,
+            Number::UnsignedInt(v) => v as _,
         }
     }
+}
 
-    /// Get the number as an i64 number if possible.
-    pub fn as_i64(self) -> Result<i64, Error> {
-        match self {
-            Self::Float(_) => Err(Error::UnsupportedConversion),
-            Self::SignedInt(v) => Ok(v),
-            Self::UnsignedInt(v) => v.try_into().map_err(|_| Error::OutOfBounds),
+macro_rules! try_int_from_number {
+    ( $x:ty ) => {
+        impl TryFrom<Number> for $x {
+            type Error = Error;
+
+            #[inline]
+            fn try_from(n: Number) -> Result<Self, Self::Error> {
+                let res = match n {
+                    Number::Float(_) => return Err(Error::UnsupportedConversion),
+                    Number::SignedInt(v) => v.try_into(),
+                    Number::UnsignedInt(v) => v.try_into(),
+                };
+
+                res.map_err(|_| Error::OutOfBounds)
+            }
+        }
+    };
+}
+
+try_int_from_number!(i8);
+try_int_from_number!(i16);
+try_int_from_number!(i32);
+try_int_from_number!(isize);
+
+impl TryFrom<Number> for i64 {
+    type Error = Error;
+
+    #[inline]
+    fn try_from(n: Number) -> Result<Self, Self::Error> {
+        match n {
+            Number::Float(_) => Err(Error::UnsupportedConversion),
+            Number::SignedInt(v) => Ok(v),
+            Number::UnsignedInt(v) => v.try_into().map_err(|_| Error::OutOfBounds),
         }
     }
+}
 
-    /// Get the number as a u64 number if possible.
-    pub fn as_u64(self) -> Result<u64, Error> {
-        match self {
-            Self::Float(_) => Err(Error::UnsupportedConversion),
-            Self::SignedInt(v) => v.try_into().map_err(|_| Error::OutOfBounds),
-            Self::UnsignedInt(v) => Ok(v),
+try_int_from_number!(u8);
+try_int_from_number!(u16);
+try_int_from_number!(u32);
+try_int_from_number!(usize);
+
+impl TryFrom<Number> for u64 {
+    type Error = Error;
+
+    #[inline]
+    fn try_from(n: Number) -> Result<Self, Self::Error> {
+        match n {
+            Number::Float(_) => Err(Error::UnsupportedConversion),
+            Number::SignedInt(v) => v.try_into().map_err(|_| Error::OutOfBounds),
+            Number::UnsignedInt(v) => Ok(v),
         }
     }
 }
 
 impl Serialize for Number {
+    #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -69,6 +101,7 @@ impl Serialize for Number {
 }
 
 impl<'de> Deserialize<'de> for Number {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Number, D::Error>
     where
         D: Deserializer<'de>,
@@ -78,6 +111,7 @@ impl<'de> Deserialize<'de> for Number {
         impl<'a> Visitor<'a> for NumberVisitor {
             type Value = Number;
 
+            #[inline]
             fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
                 f.write_str("a number")
             }
@@ -125,7 +159,7 @@ macro_rules! intermediate {
         $crate::Intermediate::Map({
             let mut map = $crate::Map::new();
             $(
-                map.insert($key.to_string(), intermediate!($value));
+                map.insert_with_str_key($key, intermediate!($value));
             )*
             map
         })
@@ -166,43 +200,33 @@ pub enum Intermediate {
 
 impl Intermediate {
     /// Check if the value is None.
+    #[inline]
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
 
     /// Get the value as a boolean (if possible).
+    #[inline]
     pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            Self::Bool(v) => Some(*v),
-            _ => None,
+        if let Self::Bool(v) = self {
+            Some(*v)
+        } else {
+            None
         }
     }
 
-    /// Get the value as an f64 (if possible).
-    pub fn as_f64(&self) -> Option<f64> {
-        match self {
-            Self::Number(v) => Some(v.as_f64()),
-            _ => None,
-        }
-    }
-
-    /// Get the value as an i64 (if possible).
-    pub fn as_i64(&self) -> Option<Result<i64, Error>> {
-        match self {
-            Self::Number(v) => Some(v.as_i64()),
-            _ => None,
-        }
-    }
-
-    /// Get the value as a u64 (if possible).
-    pub fn as_u64(&self) -> Option<Result<u64, Error>> {
-        match self {
-            Self::Number(v) => Some(v.as_u64()),
-            _ => None,
+    /// Get the numeric value (if possible).
+    #[inline]
+    pub fn as_number(&self) -> Option<Number> {
+        if let Self::Number(v) = self {
+            Some(*v)
+        } else {
+            None
         }
     }
 
     /// Get the value as a character (if possible).
+    #[inline]
     pub fn as_char(&self) -> Option<char> {
         if let Some(s) = self.as_str() {
             let mut chars = s.chars();
@@ -221,67 +245,80 @@ impl Intermediate {
     }
 
     /// Get the value as a string (if possible).
+    #[inline]
     pub fn as_str(&self) -> Option<&str> {
-        match self {
-            Self::String(v) => Some(v),
-            _ => None,
+        if let Self::String(v) = self {
+            Some(v)
+        } else {
+            None
         }
     }
 
     /// Get the value as an array (if possible).
+    #[inline]
     pub fn as_array(&self) -> Option<&[Intermediate]> {
-        match self {
-            Self::Array(v) => Some(v),
-            _ => None,
+        if let Self::Array(v) = self {
+            Some(v)
+        } else {
+            None
         }
     }
 
     /// Get the value as a map (if possible).
+    #[inline]
     pub fn as_map(&self) -> Option<&Map> {
-        match self {
-            Self::Map(v) => Some(v),
-            _ => None,
+        if let Self::Map(v) = self {
+            Some(v)
+        } else {
+            None
         }
     }
 }
 
 impl From<()> for Intermediate {
+    #[inline]
     fn from(_: ()) -> Self {
         Self::None
     }
 }
 
 impl From<bool> for Intermediate {
+    #[inline]
     fn from(v: bool) -> Self {
         Self::Bool(v)
     }
 }
 
 impl From<Number> for Intermediate {
+    #[inline]
     fn from(v: Number) -> Self {
         Self::Number(v)
     }
 }
 
 impl From<i64> for Intermediate {
+    #[inline]
     fn from(v: i64) -> Self {
         Self::from(Number::SignedInt(v))
     }
 }
 
 impl From<u64> for Intermediate {
+    #[inline]
     fn from(v: u64) -> Self {
         Self::from(Number::UnsignedInt(v))
     }
 }
 
 impl From<f32> for Intermediate {
+    #[inline]
     fn from(v: f32) -> Self {
         Self::from(Number::Float(v as _))
     }
 }
 
 impl From<f64> for Intermediate {
+    #[inline]
     fn from(v: f64) -> Self {
         Self::from(Number::Float(v))
     }
@@ -290,6 +327,7 @@ impl From<f64> for Intermediate {
 macro_rules! intermediate_from_signed_int {
     ( $ty:ty ) => {
         impl From<$ty> for Intermediate {
+            #[inline]
             fn from(v: $ty) -> Self {
                 Self::from(Number::SignedInt(v.into()))
             }
@@ -304,6 +342,7 @@ intermediate_from_signed_int!(i32);
 macro_rules! intermediate_from_unsigned_int {
     ( $ty:ty ) => {
         impl From<$ty> for Intermediate {
+            #[inline]
             fn from(v: $ty) -> Self {
                 Self::from(Number::UnsignedInt(v.into()))
             }
@@ -316,14 +355,16 @@ intermediate_from_unsigned_int!(u16);
 intermediate_from_unsigned_int!(u32);
 
 impl From<String> for Intermediate {
+    #[inline]
     fn from(v: String) -> Self {
         Self::String(v)
     }
 }
 
 impl From<&str> for Intermediate {
+    #[inline]
     fn from(v: &str) -> Self {
-        Self::from(v.to_string())
+        Self::from(String::from(v))
     }
 }
 
@@ -376,18 +417,21 @@ where
 }
 
 impl crate::Serialize for Intermediate {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(self.clone())
     }
 }
 
 impl crate::Deserialize for Intermediate {
+    #[inline]
     fn deserialize(input: &Intermediate) -> Result<Self, Error> {
         Ok(input.clone())
     }
 }
 
 impl crate::Update for Intermediate {
+    #[inline]
     fn update(&mut self, other: &Intermediate) -> Result<(), Error> {
         match self {
             Self::Array(arr) => {
@@ -440,6 +484,7 @@ impl Serialize for Intermediate {
 }
 
 impl<'de> Deserialize<'de> for Intermediate {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Intermediate, D::Error>
     where
         D: Deserializer<'de>,
@@ -449,6 +494,7 @@ impl<'de> Deserialize<'de> for Intermediate {
         impl<'a> Visitor<'a> for ValueVisitor {
             type Value = Intermediate;
 
+            #[inline]
             fn expecting(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
                 f.write_str("a value")
             }
@@ -480,10 +526,9 @@ impl<'de> Deserialize<'de> for Intermediate {
 
             #[inline]
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(Intermediate::String(value.to_string()))
+                Ok(Intermediate::String(String::from(value)))
             }
 
-            #[inline]
             fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E> {
                 let mut res = Vec::with_capacity(value.len());
 

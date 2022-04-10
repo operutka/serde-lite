@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    convert::TryInto,
     fmt::Display,
     hash::Hash,
     ops::DerefMut,
@@ -21,27 +20,12 @@ pub trait Update: Deserialize {
     fn update(&mut self, val: &Intermediate) -> Result<(), Error>;
 }
 
-impl Update for bool {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val.as_bool().ok_or_else(|| Error::invalid_value("bool"))?;
-
-        *self = val;
-
-        Ok(())
-    }
-}
-
-macro_rules! update_for_signed_int {
+macro_rules! update_by_replace {
     ( $x:ty ) => {
         impl Update for $x {
+            #[inline]
             fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-                let val = val
-                    .as_i64()
-                    .ok_or_else(|| Error::invalid_value("integer"))??
-                    .try_into()
-                    .map_err(|_| Error::OutOfBounds)?;
-
-                *self = val;
+                *self = <$x as Deserialize>::deserialize(val)?;
 
                 Ok(())
             }
@@ -49,131 +33,34 @@ macro_rules! update_for_signed_int {
     };
 }
 
-macro_rules! update_for_unsigned_int {
-    ( $x:ty ) => {
-        impl Update for $x {
-            fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-                let val = val
-                    .as_u64()
-                    .ok_or_else(|| Error::invalid_value("unsigned integer"))??
-                    .try_into()
-                    .map_err(|_| Error::OutOfBounds)?;
+update_by_replace!(bool);
 
-                *self = val;
+update_by_replace!(i8);
+update_by_replace!(i16);
+update_by_replace!(i32);
+update_by_replace!(i64);
+update_by_replace!(i128);
+update_by_replace!(isize);
 
-                Ok(())
-            }
-        }
-    };
-}
+update_by_replace!(u8);
+update_by_replace!(u16);
+update_by_replace!(u32);
+update_by_replace!(u64);
+update_by_replace!(u128);
+update_by_replace!(usize);
 
-update_for_signed_int!(i8);
-update_for_signed_int!(i16);
-update_for_signed_int!(i32);
-update_for_signed_int!(isize);
+update_by_replace!(f32);
+update_by_replace!(f64);
 
-update_for_unsigned_int!(u8);
-update_for_unsigned_int!(u16);
-update_for_unsigned_int!(u32);
-update_for_unsigned_int!(usize);
+update_by_replace!(char);
 
-impl Update for i64 {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val
-            .as_i64()
-            .ok_or_else(|| Error::invalid_value("integer"))??;
-
-        *self = val;
-
-        Ok(())
-    }
-}
-
-impl Update for u64 {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val
-            .as_u64()
-            .ok_or_else(|| Error::invalid_value("unsigned integer"))??;
-
-        *self = val;
-
-        Ok(())
-    }
-}
-
-impl Update for i128 {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val
-            .as_i64()
-            .ok_or_else(|| Error::invalid_value("integer"))??;
-
-        *self = val.into();
-
-        Ok(())
-    }
-}
-
-impl Update for u128 {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val
-            .as_u64()
-            .ok_or_else(|| Error::invalid_value("unsigned integer"))??;
-
-        *self = val.into();
-
-        Ok(())
-    }
-}
-
-impl Update for f32 {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val.as_f64().ok_or_else(|| Error::invalid_value("number"))?;
-
-        *self = val as _;
-
-        Ok(())
-    }
-}
-
-impl Update for f64 {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val.as_f64().ok_or_else(|| Error::invalid_value("number"))?;
-
-        *self = val;
-
-        Ok(())
-    }
-}
-
-impl Update for char {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val
-            .as_char()
-            .ok_or_else(|| Error::invalid_value("character"))?;
-
-        *self = val;
-
-        Ok(())
-    }
-}
-
-impl Update for String {
-    fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val
-            .as_str()
-            .map(|v| v.to_string())
-            .ok_or_else(|| Error::invalid_value("string"))?;
-
-        *self = val;
-
-        Ok(())
-    }
-}
+update_by_replace!(String);
 
 impl<T> Update for Option<T>
 where
     T: Deserialize + Update,
 {
+    #[inline]
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         if val.is_none() {
             *self = None;
@@ -209,12 +96,13 @@ where
 
             Ok(())
         } else {
-            Err(Error::invalid_value("array"))
+            Err(Error::invalid_value_static("array"))
         }
     }
 }
 
 impl<T> Update for [T; 0] {
+    #[inline]
     fn update(&mut self, _: &Intermediate) -> Result<(), Error> {
         Ok(())
     }
@@ -229,7 +117,10 @@ macro_rules! update_array {
             fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
                 if let Some(val) = val.as_array() {
                     if val.len() < $len {
-                        return Err(Error::invalid_value(concat!("an array of length ", $len)));
+                        return Err(Error::invalid_value_static(concat!(
+                            "an array of length ",
+                            $len
+                        )));
                     }
 
                     for (index, elem) in val.iter().enumerate() {
@@ -238,7 +129,10 @@ macro_rules! update_array {
 
                     Ok(())
                 } else {
-                    Err(Error::invalid_value(concat!("an array of length ", $len)))
+                    Err(Error::invalid_value_static(concat!(
+                        "an array of length ",
+                        $len
+                    )))
                 }
             }
         }
@@ -279,6 +173,7 @@ update_array!(31 => (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 
 update_array!(32 => (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31));
 
 impl Update for () {
+    #[inline]
     fn update(&mut self, _: &Intermediate) -> Result<(), Error> {
         Ok(())
     }
@@ -293,7 +188,7 @@ macro_rules! update_tuple {
             fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
                 if let Some(val) = val.as_array() {
                     if val.len() < $len {
-                        return Err(Error::invalid_value(concat!("an array of length ", $len)));
+                        return Err(Error::invalid_value_static(concat!("an array of length ", $len)));
                     }
 
                     $(
@@ -302,7 +197,7 @@ macro_rules! update_tuple {
 
                     Ok(())
                 } else {
-                    Err(Error::invalid_value(concat!("an array of length ", $len)))
+                    Err(Error::invalid_value_static(concat!("an array of length ", $len)))
                 }
             }
         }
@@ -333,7 +228,9 @@ where
     V: Deserialize + Update,
 {
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val.as_map().ok_or_else(|| Error::invalid_value("map"))?;
+        let val = val
+            .as_map()
+            .ok_or_else(|| Error::invalid_value_static("map"))?;
 
         for (name, value) in val {
             let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
@@ -357,15 +254,17 @@ where
     V: Deserialize + Update,
 {
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
-        let val = val.as_map().ok_or_else(|| Error::invalid_value("map"))?;
+        let val = val
+            .as_map()
+            .ok_or_else(|| Error::invalid_value_static("map"))?;
 
         for (name, value) in val {
-            let k = K::from_str(&name).map_err(|err| Error::InvalidKey(err.to_string()))?;
+            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
 
             if let Some(inner) = self.get_mut(&k) {
-                V::update(inner, &value)?;
+                V::update(inner, value)?;
             } else {
-                self.insert(k, V::deserialize(&value)?);
+                self.insert(k, V::deserialize(value)?);
             }
         }
 
@@ -377,6 +276,7 @@ impl<T> Update for Box<T>
 where
     T: Update,
 {
+    #[inline]
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         self.deref_mut().update(val)
     }
@@ -386,6 +286,7 @@ impl<T> Update for Mutex<T>
 where
     T: Update,
 {
+    #[inline]
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         self.get_mut().unwrap().update(val)
     }
@@ -395,6 +296,7 @@ impl<T> Update for Arc<Mutex<T>>
 where
     T: Update,
 {
+    #[inline]
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         self.lock().unwrap().update(val)
     }
@@ -404,6 +306,7 @@ impl<T> Update for RefCell<T>
 where
     T: Update,
 {
+    #[inline]
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         self.borrow_mut().update(val)
     }
@@ -413,6 +316,7 @@ impl<T> Update for Rc<RefCell<T>>
 where
     T: Update,
 {
+    #[inline]
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         self.borrow_mut().update(val)
     }

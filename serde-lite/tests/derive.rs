@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use serde_lite::{intermediate, Deserialize, Intermediate, Map, Number, Serialize, Update};
 
 use serde_lite_derive::{Deserialize, Serialize, Update};
@@ -583,7 +585,8 @@ fn test_externally_tagged_enum_serialize() {
     assert_eq!(field7.len(), 1);
     let arr = get_array_field(field7, "Variant3");
     assert_eq!(arr.len(), 2);
-    assert_eq!(arr[0].as_u64().unwrap().unwrap(), 30);
+    let n: u64 = arr[0].as_number().unwrap().try_into().unwrap();
+    assert_eq!(n, 30);
     assert_eq!(arr[1].as_str().unwrap(), "sss");
 
     let field8 = get_map_field(map, "field8");
@@ -610,7 +613,8 @@ fn test_externally_tagged_enum_serialize() {
     assert_eq!(field11.len(), 1);
     let arr = get_array_field(field11, "Variant6");
     assert_eq!(arr.len(), 1);
-    assert_eq!(arr[0].as_u64().unwrap().unwrap(), 50);
+    let n: u64 = arr[0].as_number().unwrap().try_into().unwrap();
+    assert_eq!(n, 50);
 }
 
 #[test]
@@ -753,7 +757,8 @@ fn test_adjacently_tagged_enum_serialize() {
     assert_eq!(get_str_field(field14, "variant"), "Variant2");
     let arr = get_array_field(field14, "content");
     assert_eq!(arr.len(), 2);
-    assert_eq!(arr[0].as_u64().unwrap().unwrap(), 60);
+    let n: u64 = arr[0].as_number().unwrap().try_into().unwrap();
+    assert_eq!(n, 60);
     assert_eq!(arr[1].as_str().unwrap(), "asdf");
 }
 
@@ -770,18 +775,9 @@ fn test_skip_deserializing() {
     }
 
     let mut map = Map::new();
-    map.insert(
-        String::from("field1"),
-        Intermediate::Number(Number::UnsignedInt(10)),
-    );
-    map.insert(
-        String::from("field2"),
-        Intermediate::Number(Number::UnsignedInt(20)),
-    );
-    map.insert(
-        String::from("field3"),
-        Intermediate::Number(Number::UnsignedInt(30)),
-    );
+    map.insert_with_str_key("field1", Intermediate::Number(Number::UnsignedInt(10)));
+    map.insert_with_str_key("field2", Intermediate::Number(Number::UnsignedInt(20)));
+    map.insert_with_str_key("field3", Intermediate::Number(Number::UnsignedInt(30)));
     let input = Intermediate::Map(map);
 
     let mut instance = TestStruct::deserialize(&input).unwrap();
@@ -849,7 +845,12 @@ fn get_bool_field(map: &Map, name: &str) -> bool {
 
 /// Helper.
 fn get_unsigned_int_field(map: &Map, name: &str) -> u64 {
-    map.get(name).unwrap().as_u64().unwrap().unwrap()
+    map.get(name)
+        .unwrap()
+        .as_number()
+        .unwrap()
+        .try_into()
+        .unwrap()
 }
 
 /// Helper.

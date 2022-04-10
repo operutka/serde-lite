@@ -148,16 +148,16 @@ fn expand_internally_tagged_enum(
     let ltag = Literal::string(tag_field);
 
     quote! {
-        let __obj = __val.as_map().ok_or_else(|| serde_lite::Error::invalid_value("object"))?;
+        let __obj = __val.as_map().ok_or_else(|| serde_lite::Error::invalid_value_static("object"))?;
 
         let __variant = __obj
             .get(#ltag)
             .map(|v| v.as_str())
             .ok_or_else(|| serde_lite::Error::MissingField)
-            .and_then(|v| v.ok_or_else(|| serde_lite::Error::invalid_value("enum variant name")))
-            .map_err(|err| serde_lite::Error::NamedFieldErrors(vec![
-                (String::from(#ltag), err),
-            ]))?;
+            .and_then(|v| v.ok_or_else(|| serde_lite::Error::invalid_value_static("enum variant name")))
+            .map_err(|err| serde_lite::Error::from(
+                serde_lite::NamedFieldError::new_static(#ltag, err)
+            ))?;
 
         #content
 
@@ -210,7 +210,7 @@ fn expand_externally_tagged_enum(data: DataEnum) -> TokenStream {
                 _ => Err(serde_lite::Error::UnknownEnumVariant),
             }
         } else {
-            Err(serde_lite::Error::invalid_value("enum variant"))
+            Err(serde_lite::Error::invalid_value_static("enum variant"))
         }
     }
 }
@@ -259,9 +259,9 @@ fn construct_enum_variant_without_content(
         let lcontent = Literal::string(content);
 
         quote! {
-            Err(serde_lite::Error::NamedFieldErrors(vec![
-                (String::from(#lcontent), serde_lite::Error::MissingField)
-            ]))
+            Err(serde_lite::Error::from(
+                serde_lite::NamedFieldError::new_static(#lcontent, serde_lite::Error::MissingField)
+            ))
         }
     } else {
         quote! {
@@ -334,9 +334,9 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
         deserialize.extend(quote! {
             let __obj = __val
                 .as_map()
-                .ok_or_else(|| serde_lite::Error::invalid_value("object"))?;
+                .ok_or_else(|| serde_lite::Error::invalid_value_static("object"))?;
 
-            let mut __field_errors = Vec::new();
+            let mut __field_errors = serde_lite::ErrorList::new();
         });
     }
 
@@ -357,7 +357,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
                 let #name = match <#ty as serde_lite::Deserialize>::deserialize(__val) {
                     Ok(v) => Some(v),
                     Err(serde_lite::Error::NamedFieldErrors(errors)) => {
-                        __field_errors.extend(errors);
+                        __field_errors.append(errors);
                         None
                     }
                     Err(err) => return Err(err),
@@ -369,7 +369,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
                     .get(#lname)
                     .map(<#ty as serde_lite::Deserialize>::deserialize)
                     .unwrap_or_else(|| Ok(Default::default()))
-                    .map_err(|err| __field_errors.push((String::from(#lname), err)))
+                    .map_err(|err| __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err)))
                     .ok();
             });
         } else {
@@ -378,7 +378,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
                     .get(#lname)
                     .map(<#ty as serde_lite::Deserialize>::deserialize)
                     .unwrap_or_else(|| Err(serde_lite::Error::MissingField))
-                    .map_err(|err| __field_errors.push((String::from(#lname), err)))
+                    .map_err(|err| __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err)))
                     .ok();
             });
         }
@@ -389,7 +389,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
             });
         } else {
             constructor.extend(quote! {
-                #name: #name.unwrap(),
+                #name: unsafe { #name.unwrap_unchecked() },
             });
         }
     }
@@ -407,32 +407,62 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
 
 /// Generate code for deserializing given unnamed fields.
 fn deserialize_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStream) {
+    match fields.unnamed.len() {
+        0 => deserialize_unnamed_fields_0(),
+        1 => deserialize_unnamed_fields_1(fields),
+        _ => deserialize_unnamed_fields_n(fields),
+    }
+}
+
+/// Generate code for deserializing given unnamed fields where the actual
+/// number of fields is zero (e.g. zero-length tuple struct).
+fn deserialize_unnamed_fields_0() -> (TokenStream, TokenStream) {
+    let deserialize = TokenStream::new();
+    let constructor = TokenStream::new();
+
+    (deserialize, constructor)
+}
+
+/// Generate code for deserializing given unnamed fields where the actual
+/// number of fields is one (e.g. single-element tuple struct).
+fn deserialize_unnamed_fields_1(fields: &FieldsUnnamed) -> (TokenStream, TokenStream) {
     let mut deserialize = TokenStream::new();
     let mut constructor = TokenStream::new();
 
-    if !fields.unnamed.is_empty() {
-        let len = Literal::usize_unsuffixed(fields.unnamed.len());
+    let field = &fields.unnamed[0];
+    let ty = &field.ty;
+    let name = Ident::new("f0", Span::call_site());
 
-        match fields.unnamed.len() {
-            0 => (),
-            1 => deserialize.extend(quote! {
-                let __arr = std::slice::from_ref(__val);
-            }),
-            _ => deserialize.extend(quote! {
-                let __arr = __val
-                    .as_array()
-                    .ok_or_else(|| serde_lite::Error::invalid_value("array"))?;
+    deserialize.extend(quote! {
+        let #name = <#ty as serde_lite::Deserialize>::deserialize(__val)?;
+    });
 
-                if __arr.len() < #len {
-                    return Err(serde_lite::Error::invalid_value(concat!("array of length ", #len)));
-                }
-            }),
+    constructor.extend(quote! {
+        #name,
+    });
+
+    (deserialize, constructor)
+}
+
+/// Generate code for deserializing given unnamed fields where the actual
+/// number of fields is greater than one (e.g. multiple-element tuple struct).
+fn deserialize_unnamed_fields_n(fields: &FieldsUnnamed) -> (TokenStream, TokenStream) {
+    let mut deserialize = TokenStream::new();
+    let mut constructor = TokenStream::new();
+
+    let len = Literal::usize_unsuffixed(fields.unnamed.len());
+
+    deserialize.extend(quote! {
+        let __arr = __val
+            .as_array()
+            .ok_or_else(|| serde_lite::Error::invalid_value_static("array"))?;
+
+        if __arr.len() < #len {
+            return Err(serde_lite::Error::invalid_value_static(concat!("array of length ", #len)));
         }
 
-        deserialize.extend(quote! {
-            let mut __field_errors = Vec::new();
-        });
-    }
+        let mut __field_errors = serde_lite::ErrorList::new();
+    });
 
     for (index, field) in fields.unnamed.iter().enumerate() {
         let ty = &field.ty;
@@ -442,34 +472,20 @@ fn deserialize_unnamed_fields(fields: &FieldsUnnamed) -> (TokenStream, TokenStre
 
         deserialize.extend(quote! {
             let #name = <#ty as serde_lite::Deserialize>::deserialize(&__arr[#lindex])
-                .map_err(|err| __field_errors.push((#lindex, err)))
+                .map_err(|err| __field_errors.push(serde_lite::UnnamedFieldError::new(#lindex, err)))
                 .ok();
         });
 
-        if index > 0 {
-            constructor.extend(quote! {
-                , #name.unwrap()
-            });
-        } else {
-            constructor.extend(quote! {
-                #name.unwrap()
-            });
-        }
+        constructor.extend(quote! {
+            unsafe { #name.unwrap_unchecked() },
+        });
     }
 
-    match fields.unnamed.len() {
-        0 => (),
-        1 => deserialize.extend(quote! {
-            if let Some((_, err)) = __field_errors.pop() {
-                return Err(err);
-            }
-        }),
-        _ => deserialize.extend(quote! {
-            if !__field_errors.is_empty() {
-                return Err(serde_lite::Error::UnnamedFieldErrors(__field_errors));
-            }
-        }),
-    }
+    deserialize.extend(quote! {
+        if !__field_errors.is_empty() {
+            return Err(serde_lite::Error::UnnamedFieldErrors(__field_errors));
+        }
+    });
 
     (deserialize, constructor)
 }

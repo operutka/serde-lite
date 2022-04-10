@@ -23,19 +23,21 @@ pub trait Deserialize {
 }
 
 impl Deserialize for bool {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-        val.as_bool().ok_or_else(|| Error::invalid_value("bool"))
+        val.as_bool()
+            .ok_or_else(|| Error::invalid_value_static("bool"))
     }
 }
 
 macro_rules! deserialize_for_signed_int {
     ( $x:ty ) => {
         impl Deserialize for $x {
+            #[inline]
             fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-                val.as_i64()
-                    .ok_or_else(|| Error::invalid_value("integer"))??
-                    .try_into()
-                    .map_err(|_| Error::OutOfBounds)
+                val.as_number()
+                    .ok_or_else(|| Error::invalid_value_static("integer"))
+                    .and_then(|n| n.try_into())
             }
         }
     };
@@ -44,11 +46,11 @@ macro_rules! deserialize_for_signed_int {
 macro_rules! deserialize_for_unsigned_int {
     ( $x:ty ) => {
         impl Deserialize for $x {
+            #[inline]
             fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-                val.as_u64()
-                    .ok_or_else(|| Error::invalid_value("unsigned integer"))??
-                    .try_into()
-                    .map_err(|_| Error::OutOfBounds)
+                val.as_number()
+                    .ok_or_else(|| Error::invalid_value_static("unsigned integer"))
+                    .and_then(|n| n.try_into())
             }
         }
     };
@@ -57,69 +59,59 @@ macro_rules! deserialize_for_unsigned_int {
 deserialize_for_signed_int!(i8);
 deserialize_for_signed_int!(i16);
 deserialize_for_signed_int!(i32);
+deserialize_for_signed_int!(i64);
 deserialize_for_signed_int!(isize);
 
 deserialize_for_unsigned_int!(u8);
 deserialize_for_unsigned_int!(u16);
 deserialize_for_unsigned_int!(u32);
+deserialize_for_unsigned_int!(u64);
 deserialize_for_unsigned_int!(usize);
 
-impl Deserialize for i64 {
-    fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-        val.as_i64()
-            .ok_or_else(|| Error::invalid_value("integer"))?
-    }
-}
-
-impl Deserialize for u64 {
-    fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-        val.as_u64()
-            .ok_or_else(|| Error::invalid_value("unsigned integer"))?
-    }
-}
-
 impl Deserialize for i128 {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-        val.as_i64()
-            .ok_or_else(|| Error::invalid_value("integer"))?
-            .map(|v| v.into())
+        i64::deserialize(val).map(|v| v.into())
     }
 }
 
 impl Deserialize for u128 {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-        val.as_u64()
-            .ok_or_else(|| Error::invalid_value("unsigned integer"))?
-            .map(|v| v.into())
+        u64::deserialize(val).map(|v| v.into())
     }
 }
 
 impl Deserialize for f32 {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-        val.as_f64()
-            .map(|v| v as _)
-            .ok_or_else(|| Error::invalid_value("number"))
+        f64::deserialize(val).map(|v| v as _)
     }
 }
 
 impl Deserialize for f64 {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error> {
-        val.as_f64().ok_or_else(|| Error::invalid_value("number"))
+        val.as_number()
+            .map(|n| n.into())
+            .ok_or_else(|| Error::invalid_value_static("number"))
     }
 }
 
 impl Deserialize for char {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error> {
         val.as_char()
-            .ok_or_else(|| Error::invalid_value("character"))
+            .ok_or_else(|| Error::invalid_value_static("character"))
     }
 }
 
 impl Deserialize for String {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error> {
         val.as_str()
-            .map(|v| v.to_string())
-            .ok_or_else(|| Error::invalid_value("string"))
+            .map(String::from)
+            .ok_or_else(|| Error::invalid_value_static("string"))
     }
 }
 
@@ -127,6 +119,7 @@ impl<T> Deserialize for Option<T>
 where
     T: Deserialize,
 {
+    #[inline]
     fn deserialize(val: &Intermediate) -> Result<Self, Error>
     where
         Self: Sized,
@@ -156,12 +149,13 @@ where
 
             Ok(res)
         } else {
-            Err(Error::invalid_value("array"))
+            Err(Error::invalid_value_static("array"))
         }
     }
 }
 
 impl<T> Deserialize for [T; 0] {
+    #[inline]
     fn deserialize(_: &Intermediate) -> Result<Self, Error>
     where
         Self: Sized,
@@ -179,7 +173,7 @@ macro_rules! deserialize_array {
             fn deserialize(val: &Intermediate) -> Result<Self, Error> {
                 if let Some(val) = val.as_array() {
                     if val.len() < $len {
-                        return Err(Error::invalid_value(concat!("an array of length ", $len)));
+                        return Err(Error::invalid_value_static(concat!("an array of length ", $len)));
                     }
 
                     Ok([
@@ -188,7 +182,7 @@ macro_rules! deserialize_array {
                         ),+
                     ])
                 } else {
-                    Err(Error::invalid_value(concat!("an array of length ", $len)))
+                    Err(Error::invalid_value_static(concat!("an array of length ", $len)))
                 }
             }
         }
@@ -229,6 +223,7 @@ deserialize_array!(31 => (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 2
 deserialize_array!(32 => (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31));
 
 impl Deserialize for () {
+    #[inline]
     fn deserialize(_: &Intermediate) -> Result<Self, Error> {
         Ok(())
     }
@@ -243,7 +238,7 @@ macro_rules! deserialize_tuple {
             fn deserialize(val: &Intermediate) -> Result<Self, Error> {
                 if let Some(val) = val.as_array() {
                     if val.len() < $len {
-                        return Err(Error::invalid_value(concat!("an array of length ", $len)));
+                        return Err(Error::invalid_value_static(concat!("an array of length ", $len)));
                     }
 
                     Ok((
@@ -252,7 +247,7 @@ macro_rules! deserialize_tuple {
                         )+
                     ))
                 } else {
-                    Err(Error::invalid_value(concat!("an array of length ", $len)))
+                    Err(Error::invalid_value_static(concat!("an array of length ", $len)))
                 }
             }
         }
@@ -286,7 +281,9 @@ where
     where
         Self: Sized,
     {
-        let val = val.as_map().ok_or_else(|| Error::invalid_value("map"))?;
+        let val = val
+            .as_map()
+            .ok_or_else(|| Error::invalid_value_static("map"))?;
 
         let mut res = HashMap::with_capacity(val.len());
 
@@ -312,13 +309,15 @@ where
     where
         Self: Sized,
     {
-        let val = val.as_map().ok_or_else(|| Error::invalid_value("map"))?;
+        let val = val
+            .as_map()
+            .ok_or_else(|| Error::invalid_value_static("map"))?;
 
         let mut res = indexmap::IndexMap::with_capacity(val.len());
 
         for (name, value) in val {
-            let k = K::from_str(&name).map_err(|err| Error::InvalidKey(err.to_string()))?;
-            let v = V::deserialize(&value)?;
+            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
+            let v = V::deserialize(value)?;
 
             res.insert(k, v);
         }
@@ -333,6 +332,7 @@ macro_rules! deserialize_wrapper {
         where
             T: Deserialize,
         {
+            #[inline]
             fn deserialize(val: &Intermediate) -> Result<Self, Error> {
                 let inner = T::deserialize(val)?;
 
