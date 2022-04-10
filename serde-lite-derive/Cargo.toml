@@ -1,9 +1,10 @@
 [package]
 name = "serde-lite-derive"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Ondrej Perutka <perutka.ondrej@gmail.com>"]
 license = "MIT"
 description = "Implementation of #[derive(Deserialize, Serialize, Update)] for serde-lite"
+documentation = "https://docs.rs/serde-lite-derive/"
 repository = "https://github.com/operutka/serde-lite"
 keywords = ["derive", "serde", "serialization"]
 categories = ["encoding"]
