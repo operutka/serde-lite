@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-use serde_lite::{intermediate, Deserialize, Intermediate, Map, Number, Serialize, Update};
+use serde_lite::{intermediate, Deserialize, Error, Intermediate, Map, Number, Serialize, Update};
 
 use serde_lite_derive::{Deserialize, Serialize, Update};
 
@@ -826,6 +826,92 @@ fn test_skip_serializing() {
     let map = data.as_map().unwrap();
     assert_eq!(map.len(), 1);
     assert_eq!(get_unsigned_int_field(map, "field1"), 1);
+}
+
+#[test]
+fn test_serialize_with() {
+    struct CustomType(u32);
+
+    #[derive(Serialize)]
+    struct TestStruct {
+        #[serde(serialize_with = "serialize_custom_type")]
+        field: CustomType,
+    }
+
+    fn serialize_custom_type(val: &CustomType) -> Result<Intermediate, Error> {
+        let CustomType(inner) = val;
+
+        inner.serialize()
+    }
+
+    let val = TestStruct {
+        field: CustomType(10),
+    };
+
+    let data = val.serialize().unwrap();
+    let fields = data.as_map().unwrap();
+
+    assert_eq!(fields.len(), 1);
+    assert_eq!(get_unsigned_int_field(fields, "field"), 10);
+}
+
+#[test]
+fn test_deserialize_with() {
+    struct CustomType(u32);
+
+    #[derive(Deserialize)]
+    struct TestStruct {
+        #[serde(deserialize_with = "deserialize_custom_type")]
+        field: CustomType,
+    }
+
+    fn deserialize_custom_type(val: &Intermediate) -> Result<CustomType, Error> {
+        Ok(CustomType(u32::deserialize(val)?))
+    }
+
+    let input = intermediate!({
+        "field": 15
+    });
+
+    let res = TestStruct::deserialize(&input).unwrap();
+
+    assert_eq!(res.field.0, 15);
+}
+
+#[test]
+fn test_update_with() {
+    struct CustomType(u32);
+
+    #[derive(Deserialize, Update)]
+    struct TestStruct {
+        #[serde(
+            deserialize_with = "deserialize_custom_type",
+            update_with = "update_custom_type"
+        )]
+        field: CustomType,
+    }
+
+    fn deserialize_custom_type(val: &Intermediate) -> Result<CustomType, Error> {
+        Ok(CustomType(u32::deserialize(val)?))
+    }
+
+    fn update_custom_type(val: &mut CustomType, input: &Intermediate) -> Result<(), Error> {
+        u32::update(&mut val.0, input)?;
+
+        Ok(())
+    }
+
+    let input = intermediate!({
+        "field": 15
+    });
+
+    let mut val = TestStruct {
+        field: CustomType(10),
+    };
+
+    val.update(&input).unwrap();
+
+    assert_eq!(val.field.0, 15);
 }
 
 /// Helper.

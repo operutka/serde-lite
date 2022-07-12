@@ -243,8 +243,17 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
 
     for field in &fields.named {
         let name = &field.ident;
+        let ty = &field.ty;
         let sname = attributes::get_field_name(field);
         let lname = Literal::string(&sname);
+        let serializer = attributes::get_field_serializer(field)
+            .map(|path| TokenStream::from_str(&path))
+            .map(|res| res.expect("invalid path given for the serialize_with attribute"))
+            .unwrap_or_else(|| {
+                quote! {
+                    <#ty as serde_lite::Serialize>::serialize
+                }
+            });
         let skip = attributes::has_flag(&field.attrs, "skip")
             || attributes::has_flag(&field.attrs, "skip_serializing");
 
@@ -256,7 +265,7 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
             continue;
         } else if attributes::has_flag(&field.attrs, "flatten") {
             quote! {
-                match #name.serialize() {
+                match #serializer(#name) {
                     Ok(serde_lite::Intermediate::Map(inner)) => __map.extend(inner),
                     Ok(_) => return Err(serde_lite::Error::custom_static(
                         concat!("field \"", stringify!(#name), "\" cannot be flattened")
@@ -269,7 +278,7 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
             }
         } else {
             quote! {
-                match #name.serialize() {
+                match #serializer(#name) {
                     Ok(v) => __map.insert_with_str_key(#lname, v),
                     Err(err) => {
                         __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err));

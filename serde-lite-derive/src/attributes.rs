@@ -26,6 +26,45 @@ pub fn get_skip_field_serializing_if(field: &Field) -> Option<String> {
     }
 }
 
+/// Get field serializer path (if present).
+pub fn get_field_serializer(field: &Field) -> Option<String> {
+    if let Some(v) = get_attr_value(&field.attrs, "serialize_with") {
+        if let Lit::Str(n) = v {
+            Some(n.value())
+        } else {
+            panic!("invalid serialize_with attribute");
+        }
+    } else {
+        None
+    }
+}
+
+/// Get field deserializer path (if present).
+pub fn get_field_deserializer(field: &Field) -> Option<String> {
+    if let Some(v) = get_attr_value(&field.attrs, "deserialize_with") {
+        if let Lit::Str(n) = v {
+            Some(n.value())
+        } else {
+            panic!("invalid deserialize_with attribute");
+        }
+    } else {
+        None
+    }
+}
+
+/// Get field updater path (if present).
+pub fn get_field_updater(field: &Field) -> Option<String> {
+    if let Some(v) = get_attr_value(&field.attrs, "update_with") {
+        if let Lit::Str(n) = v {
+            Some(n.value())
+        } else {
+            panic!("invalid update_with attribute");
+        }
+    } else {
+        None
+    }
+}
+
 /// Get enum tag attribute (if present).
 pub fn get_enum_tag(attrs: &[Attribute]) -> Option<String> {
     if let Some(v) = get_attr_value(attrs, "tag") {

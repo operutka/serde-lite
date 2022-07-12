@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::{
@@ -345,6 +347,14 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
         let ty = &field.ty;
         let sname = attributes::get_field_name(field);
         let lname = Literal::string(&sname);
+        let deserializer = attributes::get_field_deserializer(field)
+            .map(|path| TokenStream::from_str(&path))
+            .map(|res| res.expect("invalid path given for the deserialize_with attribute"))
+            .unwrap_or_else(|| {
+                quote! {
+                    <#ty as serde_lite::Deserialize>::deserialize
+                }
+            });
         let skip = attributes::has_flag(&field.attrs, "skip")
             || attributes::has_flag(&field.attrs, "skip_deserializing");
 
@@ -354,7 +364,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
             });
         } else if attributes::has_flag(&field.attrs, "flatten") {
             deserialize.extend(quote! {
-                let #name = match <#ty as serde_lite::Deserialize>::deserialize(__val) {
+                let #name = match #deserializer(__val) {
                     Ok(v) => Some(v),
                     Err(serde_lite::Error::NamedFieldErrors(errors)) => {
                         __field_errors.append(errors);
@@ -367,7 +377,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
             deserialize.extend(quote! {
                 let #name = __obj
                     .get(#lname)
-                    .map(<#ty as serde_lite::Deserialize>::deserialize)
+                    .map(#deserializer)
                     .unwrap_or_else(|| Ok(Default::default()))
                     .map_err(|err| __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err)))
                     .ok();
@@ -376,7 +386,7 @@ fn deserialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) 
             deserialize.extend(quote! {
                 let #name = __obj
                     .get(#lname)
-                    .map(<#ty as serde_lite::Deserialize>::deserialize)
+                    .map(#deserializer)
                     .unwrap_or_else(|| Err(serde_lite::Error::MissingField))
                     .map_err(|err| __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err)))
                     .ok();

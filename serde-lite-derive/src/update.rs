@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use proc_macro2::{Literal, Span, TokenStream};
 use quote::quote;
 use syn::{
@@ -387,8 +389,17 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
 
     for field in &fields.named {
         let name = field.ident.as_ref().unwrap();
+        let ty = &field.ty;
         let sname = attributes::get_field_name(field);
         let lname = Literal::string(&sname);
+        let updater = attributes::get_field_updater(field)
+            .map(|path| TokenStream::from_str(&path))
+            .map(|res| res.expect("invalid path given for the update_with attribute"))
+            .unwrap_or_else(|| {
+                quote! {
+                    <#ty as serde_lite::Update>::update
+                }
+            });
 
         deconstructor.extend(quote! {
             #name,
@@ -402,7 +413,7 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
 
         if attributes::has_flag(&field.attrs, "flatten") {
             update.extend(quote! {
-                if let Err(err) = serde_lite::Update::update(#name, __val) {
+                if let Err(err) = #updater(#name, __val) {
                     if let serde_lite::Error::NamedFieldErrors(errors) = err {
                         __field_errors.append(errors);
                     } else {
@@ -413,7 +424,7 @@ fn update_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
         } else {
             update.extend(quote! {
                 if let Some(__v) = __obj.get(#lname) {
-                    if let Err(err) = serde_lite::Update::update(#name, __v) {
+                    if let Err(err) = #updater(#name, __v) {
                         __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err));
                     }
                 }
