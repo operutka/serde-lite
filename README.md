@@ -125,6 +125,9 @@ definitely welcome. These attributes are supported:
     * `skip_serializing`
     * `skip_serializing_if`
     * `skip_deserializing`
+    * `serialize_with`
+    * `deserialize_with`
+    * `update_with`
 * Enum variant attributes:
     * `rename`
 

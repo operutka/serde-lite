@@ -1,6 +1,6 @@
 [package]
 name = "serde-lite"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Ondrej Perutka <perutka.ondrej@gmail.com>"]
 license = "MIT"
 description = "A general-purpose serialization/de-serialization library"
@@ -26,7 +26,7 @@ default-features = false
 features = ["std"]
 
 [dependencies.serde-lite-derive]
-version = "=0.3.1"
+version = "=0.3.2"
 path = "../serde-lite-derive"
 optional = true
 

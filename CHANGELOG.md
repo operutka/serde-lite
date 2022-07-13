@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.2 (2022-07-13)
+
+* Add support for serialize_with, deserialize_with and update_with attributes
+
 ## v0.3.1 (2022-04-10)
 
 * Add missing documentation link
