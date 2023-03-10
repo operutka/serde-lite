@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.0 (2023-03-10)
+
+* Avoid allocating strings when serializing static field/variant names
+* Redesign trait bounds for map keys
+
 ## v0.3.2 (2022-07-13)
 
 * Add support for serialize_with, deserialize_with and update_with attributes
