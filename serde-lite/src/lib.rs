@@ -112,6 +112,9 @@
 //!     * `skip_serializing`
 //!     * `skip_serializing_if`
 //!     * `skip_deserializing`
+//!     * `serialize_with`
+//!     * `deserialize_with`
+//!     * `update_with`
 //! * Enum variant attributes:
 //!     * `rename`
 //!
@@ -161,7 +164,6 @@ pub enum Error {
     MissingField,
     UnknownEnumVariant,
     MissingEnumVariantContent,
-    InvalidKey(String),
     InvalidValue(Cow<'static, str>),
     NamedFieldErrors(ErrorList<NamedFieldError>),
     UnnamedFieldErrors(ErrorList<UnnamedFieldError>),
@@ -208,7 +210,6 @@ impl Display for Error {
             Self::MissingField => f.write_str("missing field"),
             Self::UnknownEnumVariant => f.write_str("unknown enum variant"),
             Self::MissingEnumVariantContent => f.write_str("missing enum variant content"),
-            Self::InvalidKey(msg) => write!(f, "invalid key: {}", msg),
             Self::InvalidValue(expected) => write!(f, "invalid value ({} expected)", expected),
             Self::NamedFieldErrors(errors) => {
                 write!(f, "field errors ({})", errors)

@@ -1,11 +1,10 @@
 use std::{
+    borrow::Cow,
     cell::{Cell, RefCell},
     collections::HashMap,
     convert::TryInto,
-    fmt::Display,
     hash::Hash,
     rc::Rc,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -273,8 +272,7 @@ deserialize_tuple!(16 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T
 
 impl<K, V> Deserialize for HashMap<K, V>
 where
-    K: FromStr + Eq + Hash,
-    K::Err: Display,
+    K: From<Cow<'static, str>> + Eq + Hash,
     V: Deserialize,
 {
     fn deserialize(val: &Intermediate) -> Result<Self, Error>
@@ -288,7 +286,7 @@ where
         let mut res = HashMap::with_capacity(val.len());
 
         for (name, value) in val {
-            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
+            let k = K::from(name.clone());
             let v = V::deserialize(value)?;
 
             res.insert(k, v);
@@ -301,8 +299,7 @@ where
 #[cfg(feature = "preserve-order")]
 impl<K, V> Deserialize for indexmap::IndexMap<K, V>
 where
-    K: FromStr + Eq + Hash,
-    K::Err: Display,
+    K: From<Cow<'static, str>> + Eq + Hash,
     V: Deserialize,
 {
     fn deserialize(val: &Intermediate) -> Result<Self, Error>
@@ -316,7 +313,7 @@ where
         let mut res = indexmap::IndexMap::with_capacity(val.len());
 
         for (name, value) in val {
-            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
+            let k = K::from(name.clone());
             let v = V::deserialize(value)?;
 
             res.insert(k, v);

@@ -1,8 +1,8 @@
 use std::{
+    borrow::Cow,
     cell::RefCell,
     collections::HashMap,
     convert::TryFrom,
-    fmt::Display,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -122,21 +122,21 @@ impl Serialize for usize {
 impl Serialize for char {
     #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
-        Ok(Intermediate::String(self.to_string()))
+        Ok(Intermediate::String(Cow::Owned(self.to_string())))
     }
 }
 
 impl Serialize for String {
     #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
-        Ok(Intermediate::String(self.clone()))
+        Ok(Intermediate::String(Cow::Owned(self.clone())))
     }
 }
 
 impl<'a> Serialize for &'a str {
     #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
-        Ok(Intermediate::String(String::from(*self)))
+        Ok(Intermediate::String(Cow::Owned(String::from(*self))))
     }
 }
 
@@ -158,14 +158,9 @@ impl<'a, T> Serialize for &'a [T]
 where
     T: Serialize,
 {
+    #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
-        let mut res = Vec::with_capacity(self.len());
-
-        for elem in self.iter() {
-            res.push(elem.serialize()?);
-        }
-
-        Ok(Intermediate::Array(res))
+        serialize_slice(self)
     }
 }
 
@@ -175,7 +170,7 @@ where
 {
     #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
-        <&[T] as Serialize>::serialize(&(self as _))
+        serialize_slice(self)
     }
 }
 
@@ -185,7 +180,7 @@ where
 {
     #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
-        <&[T] as Serialize>::serialize(&self.as_slice())
+        serialize_slice(self)
     }
 }
 
@@ -204,7 +199,7 @@ macro_rules! serialize_array {
         {
             #[inline]
             fn serialize(&self) -> Result<Intermediate, Error> {
-                <&[T] as Serialize>::serialize(&&self[..])
+                serialize_slice(&self[..])
             }
         }
     };
@@ -288,14 +283,14 @@ serialize_tuple!(16 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10
 
 impl<K, V> Serialize for HashMap<K, V>
 where
-    K: Display,
+    K: ToString,
     V: Serialize,
 {
     fn serialize(&self) -> Result<Intermediate, Error> {
         let mut res = Map::with_capacity(self.len());
 
         for (k, v) in self.iter() {
-            res.insert(k.to_string(), v.serialize()?);
+            res.insert_with_owned_key(k.to_string(), v.serialize()?);
         }
 
         Ok(Intermediate::Map(res))
@@ -305,14 +300,14 @@ where
 #[cfg(feature = "preserve-order")]
 impl<K, V> Serialize for indexmap::IndexMap<K, V>
 where
-    K: Display,
+    K: ToString,
     V: Serialize,
 {
     fn serialize(&self) -> Result<Intermediate, Error> {
         let mut res = Map::with_capacity(self.len());
 
         for (k, v) in self.iter() {
-            res.insert(k.to_string(), v.serialize()?);
+            res.insert_with_owned_key(k.to_string(), v.serialize()?);
         }
 
         Ok(Intermediate::Map(res))
@@ -375,4 +370,18 @@ where
     fn serialize(&self) -> Result<Intermediate, Error> {
         self.borrow().serialize()
     }
+}
+
+/// Helper function.
+fn serialize_slice<T>(v: &[T]) -> Result<Intermediate, Error>
+where
+    T: Serialize,
+{
+    let mut res = Vec::with_capacity(v.len());
+
+    for elem in v.iter() {
+        res.push(elem.serialize()?);
+    }
+
+    Ok(Intermediate::Array(res))
 }

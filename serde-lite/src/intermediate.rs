@@ -1,7 +1,8 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
     convert::{TryFrom, TryInto},
-    fmt::{self, Display, Formatter},
+    fmt::{self, Formatter},
 };
 
 use serde::{
@@ -159,7 +160,7 @@ macro_rules! intermediate {
         $crate::Intermediate::Map({
             let mut map = $crate::Map::new();
             $(
-                map.insert_with_str_key($key, intermediate!($value));
+                map.insert_with_static_key($key, intermediate!($value));
             )*
             map
         })
@@ -193,7 +194,7 @@ pub enum Intermediate {
     None,
     Bool(bool),
     Number(Number),
-    String(String),
+    String(Cow<'static, str>),
     Array(Vec<Intermediate>),
     Map(Map),
 }
@@ -357,14 +358,14 @@ intermediate_from_unsigned_int!(u32);
 impl From<String> for Intermediate {
     #[inline]
     fn from(v: String) -> Self {
-        Self::String(v)
+        Self::String(Cow::Owned(v))
     }
 }
 
 impl From<&str> for Intermediate {
     #[inline]
     fn from(v: &str) -> Self {
-        Self::from(String::from(v))
+        Self::String(Cow::Owned(String::from(v)))
     }
 }
 
@@ -385,14 +386,14 @@ where
 
 impl<K, V> From<HashMap<K, V>> for Intermediate
 where
-    K: Display,
+    K: Into<Cow<'static, str>>,
     V: Into<Intermediate>,
 {
     fn from(map: HashMap<K, V>) -> Self {
         let mut res = Map::with_capacity(map.len());
 
         for (k, v) in map {
-            res.insert(k.to_string(), v.into());
+            res.insert(k.into(), v.into());
         }
 
         Self::Map(res)
@@ -402,14 +403,14 @@ where
 #[cfg(feature = "preserve-order")]
 impl<K, V> From<indexmap::IndexMap<K, V>> for Intermediate
 where
-    K: Display,
+    K: Into<Cow<'static, str>>,
     V: Into<Intermediate>,
 {
     fn from(map: indexmap::IndexMap<K, V>) -> Self {
         let mut res = Map::with_capacity(map.len());
 
         for (k, v) in map {
-            res.insert(k.to_string(), v.into());
+            res.insert(k.into(), v.into());
         }
 
         Self::Map(res)
@@ -521,12 +522,17 @@ impl<'de> Deserialize<'de> for Intermediate {
 
             #[inline]
             fn visit_char<E>(self, value: char) -> Result<Self::Value, E> {
-                Ok(Intermediate::String(value.to_string()))
+                Ok(Intermediate::String(Cow::Owned(value.to_string())))
+            }
+
+            #[inline]
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+                Ok(Intermediate::String(Cow::Owned(value)))
             }
 
             #[inline]
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(Intermediate::String(String::from(value)))
+                Ok(Intermediate::String(Cow::Owned(String::from(value))))
             }
 
             fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E> {
@@ -585,7 +591,7 @@ impl<'de> Deserialize<'de> for Intermediate {
                 }
 
                 while let Some((k, v)) = map.next_entry()? {
-                    res.insert(k, v);
+                    res.insert(Cow::Owned(k), v);
                 }
 
                 Ok(Intermediate::Map(res))

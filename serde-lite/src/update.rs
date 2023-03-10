@@ -1,11 +1,10 @@
 use std::{
+    borrow::{Borrow, Cow},
     cell::RefCell,
     collections::HashMap,
-    fmt::Display,
     hash::Hash,
     ops::DerefMut,
     rc::Rc,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -58,7 +57,7 @@ update_by_replace!(String);
 
 impl<T> Update for Option<T>
 where
-    T: Deserialize + Update,
+    T: Update,
 {
     #[inline]
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
@@ -76,7 +75,7 @@ where
 
 impl<T> Update for Vec<T>
 where
-    T: Deserialize + Update,
+    T: Update,
 {
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         if let Some(val) = val.as_array() {
@@ -223,9 +222,8 @@ update_tuple!(16 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11
 
 impl<K, V> Update for HashMap<K, V>
 where
-    K: FromStr + Eq + Hash,
-    K::Err: Display,
-    V: Deserialize + Update,
+    K: From<Cow<'static, str>> + Borrow<str> + Eq + Hash,
+    V: Update,
 {
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         let val = val
@@ -233,12 +231,13 @@ where
             .ok_or_else(|| Error::invalid_value_static("map"))?;
 
         for (name, value) in val {
-            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
-
-            if let Some(inner) = self.get_mut(&k) {
+            if let Some(inner) = self.get_mut(name) {
                 V::update(inner, value)?;
             } else {
-                self.insert(k, V::deserialize(value)?);
+                let k = K::from(name.clone());
+                let v = V::deserialize(value)?;
+
+                self.insert(k, v);
             }
         }
 
@@ -249,9 +248,8 @@ where
 #[cfg(feature = "preserve-order")]
 impl<K, V> Update for indexmap::IndexMap<K, V>
 where
-    K: FromStr + Eq + Hash,
-    K::Err: Display,
-    V: Deserialize + Update,
+    K: From<Cow<'static, str>> + Borrow<str> + Eq + Hash,
+    V: Update,
 {
     fn update(&mut self, val: &Intermediate) -> Result<(), Error> {
         let val = val
@@ -259,12 +257,13 @@ where
             .ok_or_else(|| Error::invalid_value_static("map"))?;
 
         for (name, value) in val {
-            let k = K::from_str(name).map_err(|err| Error::InvalidKey(err.to_string()))?;
-
-            if let Some(inner) = self.get_mut(&k) {
+            if let Some(inner) = self.get_mut(name as &str) {
                 V::update(inner, value)?;
             } else {
-                self.insert(k, V::deserialize(value)?);
+                let k = K::from(name.clone());
+                let v = V::deserialize(value)?;
+
+                self.insert(k, v);
             }
         }
 

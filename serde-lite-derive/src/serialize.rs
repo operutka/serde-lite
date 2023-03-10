@@ -128,13 +128,23 @@ fn expand_internally_tagged_enum(tag: &str) -> TokenStream {
         if __content.is_none() {
             let mut __map = serde_lite::Map::with_capacity(1);
 
-            __map.insert_with_str_key(#ltag, serde_lite::Intermediate::String(String::from(__tag)));
+            __map.insert_with_static_key(
+                #ltag,
+                serde_lite::Intermediate::String(std::borrow::Cow::Borrowed(__tag)),
+            );
 
             Ok(serde_lite::Intermediate::Map(__map))
         } else if let serde_lite::Intermediate::Map(__map) = __content {
             let mut __res = serde_lite::Map::with_capacity(__map.len() + 1);
 
-            __res.insert_with_str_key(#ltag, serde_lite::Intermediate::String(String::from(__tag)));
+            // NOTE: The tag must be inserted before the content because some
+            // target formats (e.g. TOML) require simple values to be
+            // serialized before more complex types.
+            __res.insert_with_static_key(
+                #ltag,
+                serde_lite::Intermediate::String(std::borrow::Cow::Borrowed(__tag)),
+            );
+
             __res.extend(__map);
 
             Ok(serde_lite::Intermediate::Map(__res))
@@ -152,8 +162,12 @@ fn expand_adjacently_tagged_enum(tag: &str, content: &str) -> TokenStream {
     quote! {
         let mut __map = serde_lite::Map::with_capacity(2);
 
-        __map.insert_with_str_key(#ltag, serde_lite::Intermediate::String(String::from(__tag)));
-        __map.insert_with_str_key(#lcont, __content);
+        __map.insert_with_static_key(
+            #ltag,
+            serde_lite::Intermediate::String(std::borrow::Cow::Borrowed(__tag)),
+        );
+
+        __map.insert_with_static_key(#lcont, __content);
 
         Ok(serde_lite::Intermediate::Map(__map))
     }
@@ -163,11 +177,11 @@ fn expand_adjacently_tagged_enum(tag: &str, content: &str) -> TokenStream {
 fn expand_externally_tagged_enum() -> TokenStream {
     quote! {
         if __content.is_none() {
-            Ok(serde_lite::Intermediate::String(String::from(__tag)))
+            Ok(serde_lite::Intermediate::String(std::borrow::Cow::Borrowed(__tag)))
         } else {
             let mut __map = serde_lite::Map::with_capacity(1);
 
-            __map.insert_with_str_key(__tag, __content);
+            __map.insert_with_static_key(__tag, __content);
 
             Ok(serde_lite::Intermediate::Map(__map))
         }
@@ -267,19 +281,21 @@ fn serialize_named_fields(fields: &FieldsNamed) -> (TokenStream, TokenStream) {
             quote! {
                 match #serializer(#name) {
                     Ok(serde_lite::Intermediate::Map(inner)) => __map.extend(inner),
-                    Ok(_) => return Err(serde_lite::Error::custom_static(
-                        concat!("field \"", stringify!(#name), "\" cannot be flattened")
-                    )),
-                    Err(serde_lite::Error::NamedFieldErrors(errors)) => {
-                        __field_errors.append(errors);
+                    Ok(_) => {
+                        __field_errors.push(serde_lite::NamedFieldError::new_static(
+                            #lname,
+                            serde_lite::Error::custom_static("field cannot be flattened"),
+                        ));
                     }
-                    Err(err) => return Err(err),
+                    Err(err) => {
+                        __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err));
+                    }
                 }
             }
         } else {
             quote! {
                 match #serializer(#name) {
-                    Ok(v) => __map.insert_with_str_key(#lname, v),
+                    Ok(v) => __map.insert_with_static_key(#lname, v),
                     Err(err) => {
                         __field_errors.push(serde_lite::NamedFieldError::new_static(#lname, err));
                     }

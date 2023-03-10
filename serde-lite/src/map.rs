@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    borrow::Cow,
+    ops::{Deref, DerefMut},
+};
 
 use crate::Intermediate;
 
@@ -13,15 +16,15 @@ pub type MapImpl<K, V> = std::collections::HashMap<K, V>;
 /// Map from string keys to `Intermediate` values.
 ///
 /// It wraps the underlying map implementation and prohibits inlining of some
-/// methods in order to make the generated code much smaller.
+/// methods in order to make the generated code smaller.
 #[derive(Debug, Clone)]
 pub struct Map {
-    inner: MapImpl<String, Intermediate>,
+    inner: MapImpl<Cow<'static, str>, Intermediate>,
 }
 
 impl Map {
     /// Create a new map.
-    #[inline]
+    #[inline(never)]
     pub fn new() -> Self {
         Self {
             inner: MapImpl::new(),
@@ -29,7 +32,7 @@ impl Map {
     }
 
     /// Create a new map with a given capacity.
-    #[inline]
+    #[inline(never)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: MapImpl::with_capacity(capacity),
@@ -43,13 +46,15 @@ impl Map {
     }
 
     /// Insert a given key-value pair into the map.
-    ///
-    /// The key is converted into its owned representation within this method
-    /// and the method also drops any previous value. In combination with
-    /// disabled inlining, it allows to create much smaller serializer methods.
     #[inline(never)]
-    pub fn insert_with_str_key(&mut self, key: &str, value: Intermediate) {
-        self.inner.insert(String::from(key), value);
+    pub fn insert_with_static_key(&mut self, key: &'static str, value: Intermediate) {
+        self.inner.insert(Cow::Borrowed(key), value);
+    }
+
+    /// Insert a given key-value pair into the map.
+    #[inline(never)]
+    pub fn insert_with_owned_key(&mut self, key: String, value: Intermediate) {
+        self.inner.insert(Cow::Owned(key), value);
     }
 }
 
@@ -60,14 +65,14 @@ impl Default for Map {
     }
 }
 
-impl From<MapImpl<String, Intermediate>> for Map {
+impl From<MapImpl<Cow<'static, str>, Intermediate>> for Map {
     #[inline]
-    fn from(map: MapImpl<String, Intermediate>) -> Self {
+    fn from(map: MapImpl<Cow<'static, str>, Intermediate>) -> Self {
         Self { inner: map }
     }
 }
 
-impl From<Map> for MapImpl<String, Intermediate> {
+impl From<Map> for MapImpl<Cow<'static, str>, Intermediate> {
     #[inline]
     fn from(map: Map) -> Self {
         map.inner
@@ -75,7 +80,7 @@ impl From<Map> for MapImpl<String, Intermediate> {
 }
 
 impl Deref for Map {
-    type Target = MapImpl<String, Intermediate>;
+    type Target = MapImpl<Cow<'static, str>, Intermediate>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -91,13 +96,13 @@ impl DerefMut for Map {
 }
 
 impl IntoIterator for Map {
-    type Item = (String, Intermediate);
+    type Item = (Cow<'static, str>, Intermediate);
 
     #[cfg(feature = "preserve-order")]
-    type IntoIter = indexmap::map::IntoIter<String, Intermediate>;
+    type IntoIter = indexmap::map::IntoIter<Cow<'static, str>, Intermediate>;
 
     #[cfg(not(feature = "preserve-order"))]
-    type IntoIter = std::collections::hash_map::IntoIter<String, Intermediate>;
+    type IntoIter = std::collections::hash_map::IntoIter<Cow<'static, str>, Intermediate>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -106,13 +111,13 @@ impl IntoIterator for Map {
 }
 
 impl<'a> IntoIterator for &'a Map {
-    type Item = (&'a String, &'a Intermediate);
+    type Item = (&'a Cow<'static, str>, &'a Intermediate);
 
     #[cfg(feature = "preserve-order")]
-    type IntoIter = indexmap::map::Iter<'a, String, Intermediate>;
+    type IntoIter = indexmap::map::Iter<'a, Cow<'static, str>, Intermediate>;
 
     #[cfg(not(feature = "preserve-order"))]
-    type IntoIter = std::collections::hash_map::Iter<'a, String, Intermediate>;
+    type IntoIter = std::collections::hash_map::Iter<'a, Cow<'static, str>, Intermediate>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {

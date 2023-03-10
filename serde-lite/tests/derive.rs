@@ -775,9 +775,9 @@ fn test_skip_deserializing() {
     }
 
     let mut map = Map::new();
-    map.insert_with_str_key("field1", Intermediate::Number(Number::UnsignedInt(10)));
-    map.insert_with_str_key("field2", Intermediate::Number(Number::UnsignedInt(20)));
-    map.insert_with_str_key("field3", Intermediate::Number(Number::UnsignedInt(30)));
+    map.insert_with_static_key("field1", Intermediate::Number(Number::UnsignedInt(10)));
+    map.insert_with_static_key("field2", Intermediate::Number(Number::UnsignedInt(20)));
+    map.insert_with_static_key("field3", Intermediate::Number(Number::UnsignedInt(30)));
     let input = Intermediate::Map(map);
 
     let mut instance = TestStruct::deserialize(&input).unwrap();
