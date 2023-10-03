@@ -3,3 +3,4 @@ members = [
     "serde-lite",
     "serde-lite-derive",
 ]
+resolver = "2"
