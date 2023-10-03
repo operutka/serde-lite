@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.0 (2023-10-03)
+
+* Use indexmap v2.x.y
+
 ## v0.4.0 (2023-03-10)
 
 * Avoid allocating strings when serializing static field/variant names
