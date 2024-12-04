@@ -362,7 +362,7 @@ fn serialize_unnamed_fields_1() -> (TokenStream, TokenStream) {
     });
 
     serialize.extend(quote! {
-        let __val = #name.serialize()?;
+        let __val = serde_lite::Serialize::serialize(#name)?;
     });
 
     (deconstructor, serialize)
@@ -393,7 +393,7 @@ fn serialize_unnamed_fields_n(fields: &FieldsUnnamed) -> (TokenStream, TokenStre
         });
 
         serialize.extend(quote! {
-            match #name.serialize() {
+            match serde_lite::Serialize::serialize(#name) {
                 Ok(v) => __arr.push(v),
                 Err(err) => __field_errors.push(serde_lite::UnnamedFieldError::new(#lindex, err)),
             }
