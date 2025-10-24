@@ -359,6 +359,13 @@ macro_rules! deserialize_wrapped_array {
                 Ok(inner.into())
             }
         }
+        impl Deserialize for $x<str> {
+            #[inline]
+            fn deserialize(val: &Intermediate) -> Result<Self, Error> {
+                let inner = String::deserialize(val)?;
+                Ok(inner.into())
+            }
+        }
     };
 }
 
