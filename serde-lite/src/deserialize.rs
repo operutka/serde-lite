@@ -327,7 +327,7 @@ macro_rules! deserialize_wrapper {
     ( $x:ident ) => {
         impl<T> Deserialize for $x<T>
         where
-            T: Deserialize,
+            T: Deserialize + Sized,
         {
             #[inline]
             fn deserialize(val: &Intermediate) -> Result<Self, Error> {
@@ -345,3 +345,23 @@ deserialize_wrapper!(Arc);
 deserialize_wrapper!(Cell);
 deserialize_wrapper!(RefCell);
 deserialize_wrapper!(Mutex);
+
+macro_rules! deserialize_wrapped_array {
+    ( $x:ident ) => {
+        impl<T> Deserialize for $x<[T]>
+        where
+            T: Deserialize,
+            Vec<T>: Into<$x<[T]>>,
+        {
+            #[inline]
+            fn deserialize(val: &Intermediate) -> Result<Self, Error> {
+                let inner = Vec::<T>::deserialize(val)?;
+                Ok(inner.into())
+            }
+        }
+    };
+}
+
+deserialize_wrapped_array!(Box);
+deserialize_wrapped_array!(Rc);
+deserialize_wrapped_array!(Arc);
