@@ -2,8 +2,6 @@ use std::convert::TryInto;
 
 use serde_lite::{intermediate, Deserialize, Error, Intermediate, Map, Number, Serialize, Update};
 
-use serde_lite_derive::{Deserialize, Serialize, Update};
-
 #[test]
 fn test_struct_deserialize() {
     let input = intermediate!({
@@ -145,6 +143,26 @@ fn test_empty_struct_deserialize() {
     assert!(UnitStruct::deserialize(&Intermediate::None).is_ok());
     assert!(EmptyStruct::deserialize(&Intermediate::None).is_ok());
     assert!(EmptyTupleStruct::deserialize(&Intermediate::None).is_ok());
+}
+
+#[test]
+fn boxed_slices_deserialize() {
+    #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+    struct Slices {
+        boxed: Box<[u8]>,
+        rced: std::rc::Rc<[u8]>,
+        arced: std::sync::Arc<[u8]>,
+    }
+
+    let slices = Slices {
+        boxed: vec![0, 1, 2, 3, 4].into_boxed_slice(),
+        rced: vec![0, 1, 2, 3, 4].into(),
+        arced: vec![0, 1, 2, 3, 4].into(),
+    };
+    assert_eq!(
+        slices,
+        Slices::deserialize(&slices.serialize().expect("serializes")).expect("deserializes")
+    )
 }
 
 #[test]
