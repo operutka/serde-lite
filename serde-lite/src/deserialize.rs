@@ -272,7 +272,8 @@ deserialize_tuple!(16 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T
 
 impl<K, V, S> Deserialize for HashMap<K, V, S>
 where
-    K: From<Cow<'static, str>> + Eq + Hash,
+    K: TryFrom<Cow<'static, str>> + Eq + Hash,
+    <K as TryFrom<Cow<'static, str>>>::Error: std::fmt::Display,
     V: Deserialize,
     S: core::hash::BuildHasher + Default,
 {
@@ -287,7 +288,7 @@ where
         let mut res = HashMap::with_capacity_and_hasher(val.len(), S::default());
 
         for (name, value) in val {
-            let k = K::from(name.clone());
+            let k = K::try_from(name.clone()).map_err(Error::invalid_value)?;
             let v = V::deserialize(value)?;
 
             res.insert(k, v);
@@ -300,7 +301,8 @@ where
 #[cfg(feature = "preserve-order")]
 impl<K, V, S> Deserialize for indexmap::IndexMap<K, V, S>
 where
-    K: From<Cow<'static, str>> + Eq + Hash,
+    K: TryFrom<Cow<'static, str>> + Eq + Hash,
+    <K as TryFrom<Cow<'static, str>>>::Error: std::fmt::Display,
     V: Deserialize,
     S: core::hash::BuildHasher + Default,
 {
@@ -315,7 +317,7 @@ where
         let mut res = indexmap::IndexMap::with_capacity_and_hasher(val.len(), S::default());
 
         for (name, value) in val {
-            let k = K::from(name.clone());
+            let k = K::try_from(name.clone()).map_err(Error::invalid_value)?;
             let v = V::deserialize(value)?;
 
             res.insert(k, v);
