@@ -281,11 +281,10 @@ serialize_tuple!(14 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10
 serialize_tuple!(15 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14));
 serialize_tuple!(16 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14 15 T15));
 
-impl<K, V, S> Serialize for HashMap<K, V, S>
+impl<K, V> Serialize for HashMap<K, V>
 where
     K: ToString,
     V: Serialize,
-    S: core::hash::BuildHasher,
 {
     fn serialize(&self) -> Result<Intermediate, Error> {
         let mut res = Map::with_capacity(self.len());
@@ -299,11 +298,10 @@ where
 }
 
 #[cfg(feature = "preserve-order")]
-impl<K, V, S> Serialize for indexmap::IndexMap<K, V, S>
+impl<K, V> Serialize for indexmap::IndexMap<K, V>
 where
     K: ToString,
     V: Serialize,
-    S: core::hash::BuildHasher,
 {
     fn serialize(&self) -> Result<Intermediate, Error> {
         let mut res = Map::with_capacity(self.len());
