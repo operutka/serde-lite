@@ -345,6 +345,21 @@ macro_rules! serialize_wrapper {
                 <T as Serialize>::serialize(&*self)
             }
         }
+        impl<T> Serialize for $x<[T]>
+        where
+            T: Serialize,
+        {
+            #[inline]
+            fn serialize(&self) -> Result<Intermediate, Error> {
+                <&[T] as Serialize>::serialize(&&**self)
+            }
+        }
+        impl Serialize for $x<str> {
+            #[inline]
+            fn serialize(&self) -> Result<Intermediate, Error> {
+                <&str as Serialize>::serialize(&&**self)
+            }
+        }
     };
 }
 
