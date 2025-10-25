@@ -270,10 +270,12 @@ deserialize_tuple!(14 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T
 deserialize_tuple!(15 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14));
 deserialize_tuple!(16 => (0 T0 1 T1 2 T2 3 T3 4 T4 5 T5 6 T6 7 T7 8 T8 9 T9 10 T10 11 T11 12 T12 13 T13 14 T14 15 T15));
 
-impl<K, V> Deserialize for HashMap<K, V>
+impl<K, V, S> Deserialize for HashMap<K, V, S>
 where
-    K: From<Cow<'static, str>> + Eq + Hash,
+    K: TryFrom<Cow<'static, str>> + Eq + Hash,
+    <K as TryFrom<Cow<'static, str>>>::Error: std::fmt::Display,
     V: Deserialize,
+    S: core::hash::BuildHasher + Default,
 {
     fn deserialize(val: &Intermediate) -> Result<Self, Error>
     where
@@ -283,10 +285,10 @@ where
             .as_map()
             .ok_or_else(|| Error::invalid_value_static("map"))?;
 
-        let mut res = HashMap::with_capacity(val.len());
+        let mut res = HashMap::with_capacity_and_hasher(val.len(), S::default());
 
         for (name, value) in val {
-            let k = K::from(name.clone());
+            let k = K::try_from(name.clone()).map_err(Error::invalid_value)?;
             let v = V::deserialize(value)?;
 
             res.insert(k, v);
@@ -297,10 +299,12 @@ where
 }
 
 #[cfg(feature = "preserve-order")]
-impl<K, V> Deserialize for indexmap::IndexMap<K, V>
+impl<K, V, S> Deserialize for indexmap::IndexMap<K, V, S>
 where
-    K: From<Cow<'static, str>> + Eq + Hash,
+    K: TryFrom<Cow<'static, str>> + Eq + Hash,
+    <K as TryFrom<Cow<'static, str>>>::Error: std::fmt::Display,
     V: Deserialize,
+    S: core::hash::BuildHasher + Default,
 {
     fn deserialize(val: &Intermediate) -> Result<Self, Error>
     where
@@ -310,10 +314,10 @@ where
             .as_map()
             .ok_or_else(|| Error::invalid_value_static("map"))?;
 
-        let mut res = indexmap::IndexMap::with_capacity(val.len());
+        let mut res = indexmap::IndexMap::with_capacity_and_hasher(val.len(), S::default());
 
         for (name, value) in val {
-            let k = K::from(name.clone());
+            let k = K::try_from(name.clone()).map_err(Error::invalid_value)?;
             let v = V::deserialize(value)?;
 
             res.insert(k, v);
@@ -327,7 +331,7 @@ macro_rules! deserialize_wrapper {
     ( $x:ident ) => {
         impl<T> Deserialize for $x<T>
         where
-            T: Deserialize,
+            T: Deserialize + Sized,
         {
             #[inline]
             fn deserialize(val: &Intermediate) -> Result<Self, Error> {
@@ -345,3 +349,30 @@ deserialize_wrapper!(Arc);
 deserialize_wrapper!(Cell);
 deserialize_wrapper!(RefCell);
 deserialize_wrapper!(Mutex);
+
+macro_rules! deserialize_wrapped_array {
+    ( $x:ident ) => {
+        impl<T> Deserialize for $x<[T]>
+        where
+            T: Deserialize,
+            Vec<T>: Into<$x<[T]>>,
+        {
+            #[inline]
+            fn deserialize(val: &Intermediate) -> Result<Self, Error> {
+                let inner = Vec::<T>::deserialize(val)?;
+                Ok(inner.into())
+            }
+        }
+        impl Deserialize for $x<str> {
+            #[inline]
+            fn deserialize(val: &Intermediate) -> Result<Self, Error> {
+                let inner = String::deserialize(val)?;
+                Ok(inner.into())
+            }
+        }
+    };
+}
+
+deserialize_wrapped_array!(Box);
+deserialize_wrapped_array!(Rc);
+deserialize_wrapped_array!(Arc);
