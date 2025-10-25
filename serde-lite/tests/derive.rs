@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 
 use serde_lite::{intermediate, Deserialize, Error, Intermediate, Map, Number, Serialize, Update};
+use serde_lite_derive::{Deserialize, Serialize, Update};
 
 #[test]
 fn test_struct_deserialize() {
