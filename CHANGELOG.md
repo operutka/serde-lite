@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.1 (2025-12-15)
+
+* Use full-path for serialize trait method to avoid collisions with other
+  serialize trait methods
+* Fix unused assignment warnings
+
 ## v0.5.0 (2023-10-03)
 
 * Use indexmap v2.x.y
