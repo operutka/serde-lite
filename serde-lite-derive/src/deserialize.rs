@@ -40,7 +40,7 @@ fn expand_for_struct(
     };
 
     let expanded = quote! {
-        #[allow(unused_variables)]
+        #[allow(unused_assignments, unused_variables)]
         impl #impl_generics serde_lite::Deserialize for #name #ty_generics #where_clause {
             fn deserialize(__val: &serde_lite::Intermediate) -> Result<Self, serde_lite::Error> {
                 #deserialize
@@ -97,7 +97,7 @@ fn expand_for_enum(
     };
 
     quote! {
-        #[allow(unused_variables)]
+        #[allow(unused_assignments, unused_variables)]
         impl #impl_generics serde_lite::Deserialize for #name #ty_generics #where_clause {
             fn deserialize(__val: &serde_lite::Intermediate) -> Result<Self, serde_lite::Error> {
                 #deserialize
