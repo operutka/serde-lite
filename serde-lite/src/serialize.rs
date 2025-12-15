@@ -133,7 +133,7 @@ impl Serialize for String {
     }
 }
 
-impl<'a> Serialize for &'a str {
+impl Serialize for &str {
     #[inline]
     fn serialize(&self) -> Result<Intermediate, Error> {
         Ok(Intermediate::String(Cow::Owned(String::from(*self))))
@@ -154,7 +154,7 @@ where
     }
 }
 
-impl<'a, T> Serialize for &'a [T]
+impl<T> Serialize for &[T]
 where
     T: Serialize,
 {
@@ -164,7 +164,7 @@ where
     }
 }
 
-impl<'a, T> Serialize for &'a mut [T]
+impl<T> Serialize for &mut [T]
 where
     T: Serialize,
 {
@@ -314,7 +314,7 @@ where
     }
 }
 
-impl<'a, T> Serialize for &'a T
+impl<T> Serialize for &T
 where
     T: Serialize + ?Sized,
 {
@@ -324,7 +324,7 @@ where
     }
 }
 
-impl<'a, T> Serialize for &'a mut T
+impl<T> Serialize for &mut T
 where
     T: Serialize + ?Sized,
 {

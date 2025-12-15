@@ -406,6 +406,13 @@ impl<T> ErrorList<T> {
     }
 }
 
+impl<T> Default for ErrorList<T> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a, T> IntoIterator for &'a ErrorList<T> {
     type Item = &'a T;
     type IntoIter = std::collections::linked_list::Iter<'a, T>;
